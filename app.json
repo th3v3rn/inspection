@@ -52,7 +52,9 @@
       "router": {},
       "eas": {
         "projectId": "f96f5385-9d2a-4483-94aa-32f86242b106"
-      }
+      },
+      "SMARTY_AUTH_ID": "demo",
+      "SMARTY_AUTH_TOKEN": "demo"
     }
   }
 }

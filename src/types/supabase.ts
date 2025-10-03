@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      inspection_images: {
+        Row: {
+          category: string
+          created_at: string | null
+          exif_data: Json | null
+          file_name: string
+          file_size: number | null
+          id: string
+          image_url: string
+          inspection_id: string | null
+          mime_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category: string
+          created_at?: string | null
+          exif_data?: Json | null
+          file_name: string
+          file_size?: number | null
+          id?: string
+          image_url: string
+          inspection_id?: string | null
+          mime_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          exif_data?: Json | null
+          file_name?: string
+          file_size?: number | null
+          id?: string
+          image_url?: string
+          inspection_id?: string | null
+          mime_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_images_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspections: {
         Row: {
           address: string

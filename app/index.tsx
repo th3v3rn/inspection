@@ -10,16 +10,30 @@ import {
   Platform,
   AppState,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Wifi, WifiOff, Plus, List, RefreshCw } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useInspections } from "../hooks/useInspections";
+import InspectionForm from "./components/InspectionForm";
 
 export default function HomeScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+  const inspectionId = params.inspectionId as string;
+  
   const { inspections, loading, refetch } = useInspections();
   const [isOnline, setIsOnline] = useState(true);
   const [syncing, setSyncing] = useState(false);
+
+  // If inspectionId is provided, show the InspectionForm directly
+  if (inspectionId) {
+    return (
+      <InspectionForm 
+        onCancel={() => router.replace("/")}
+        onSave={() => router.replace("/")}
+      />
+    );
+  }
 
   // Get recent inspections (last 3)
   const recentInspections = inspections.slice(0, 3).map(inspection => ({

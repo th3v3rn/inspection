@@ -5,9 +5,9 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
+  Modal,
 } from "react-native";
 import { useInspections } from "../../hooks/useInspections";
 import { useRouter } from "expo-router";
@@ -32,6 +32,11 @@ const SavedInspectionsList = () => {
   const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
   const [filterSync, setFilterSync] = useState<"all" | "synced" | "not-synced">("all");
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Modal states
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
 
   // Filter inspections based on search query and filters
   const filteredInspections = inspections.filter((inspection) => {
@@ -52,25 +57,28 @@ const SavedInspectionsList = () => {
   });
 
   // Handle inspection deletion with confirmation
-  const confirmDelete = (id: string) => {
-    Alert.alert(
-      "Delete Inspection",
-      "Are you sure you want to delete this inspection? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          onPress: async () => {
-            try {
-              await deleteInspection(id);
-            } catch (err) {
-              Alert.alert("Error", "Failed to delete inspection");
-            }
-          },
-          style: "destructive",
-        },
-      ],
-    );
+  const handleDeleteInspection = (id: string) => {
+    console.log('Delete button pressed for inspection:', id);
+    const inspection = inspections.find(i => i.id === id);
+    
+    if (inspection) {
+      setSelectedInspection(inspection);
+      setShowDeleteModal(true);
+    }
+  };
+
+  // Confirm deletion
+  const confirmDelete = async () => {
+    if (selectedInspection) {
+      try {
+        console.log('Deleting inspection:', selectedInspection.id);
+        await deleteInspection(selectedInspection.id);
+        setShowDeleteModal(false);
+        setSelectedInspection(null);
+      } catch (err) {
+        console.error('Delete error:', err);
+      }
+    }
   };
 
   // Handle refresh action
@@ -82,12 +90,21 @@ const SavedInspectionsList = () => {
 
   // Navigate to view inspection details
   const handleViewInspection = (id: string) => {
-    router.push(`/inspection/${id}`);
+    console.log('View button pressed for inspection:', id);
+    const inspection = inspections.find(i => i.id === id);
+    console.log('Found inspection:', inspection);
+    
+    if (inspection) {
+      setSelectedInspection(inspection);
+      setShowViewModal(true);
+    }
   };
 
   // Navigate to edit inspection
   const handleEditInspection = (id: string) => {
-    router.push(`/inspection/edit/${id}`);
+    console.log('Edit button pressed for inspection:', id);
+    // Navigate back to the main app with the inspection ID
+    router.push(`/?inspectionId=${id}`);
   };
 
   // Navigate back to home
@@ -155,24 +172,27 @@ const SavedInspectionsList = () => {
 
         <View className="flex-row justify-end pt-2 border-t border-gray-100">
           <TouchableOpacity
-            className="mr-4 p-2 rounded-full bg-blue-50"
+            className="mr-4 p-3 rounded-lg bg-blue-50 min-w-[44] min-h-[44] items-center justify-center"
             onPress={() => handleViewInspection(item.id)}
+            activeOpacity={0.7}
           >
-            <Text className="text-blue-600">👁</Text>
+            <Text className="text-blue-600 text-lg">👁</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="mr-4 p-2 rounded-full bg-amber-50"
+            className="mr-4 p-3 rounded-lg bg-amber-50 min-w-[44] min-h-[44] items-center justify-center"
             onPress={() => handleEditInspection(item.id)}
+            activeOpacity={0.7}
           >
-            <Text className="text-amber-600">✏️</Text>
+            <Text className="text-amber-600 text-lg">✏️</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="p-2 rounded-full bg-red-50"
-            onPress={() => confirmDelete(item.id)}
+            className="p-3 rounded-lg bg-red-50 min-w-[44] min-h-[44] items-center justify-center"
+            onPress={() => handleDeleteInspection(item.id)}
+            activeOpacity={0.7}
           >
-            <Text className="text-red-600">🗑</Text>
+            <Text className="text-red-600 text-lg">🗑</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -345,6 +365,107 @@ const SavedInspectionsList = () => {
           </View>
         )}
       </View>
+
+      {/* View Inspection Modal */}
+      <Modal
+        visible={showViewModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowViewModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-center items-center p-4">
+          <View className="bg-white rounded-lg p-6 w-full max-w-md">
+            <Text className="text-xl font-bold text-gray-800 mb-4">Inspection Details</Text>
+            
+            {selectedInspection && (
+              <View className="space-y-3">
+                <View>
+                  <Text className="text-gray-600 text-sm">Address</Text>
+                  <Text className="text-gray-800 font-medium">{selectedInspection.address}</Text>
+                </View>
+                
+                <View>
+                  <Text className="text-gray-600 text-sm">Date</Text>
+                  <Text className="text-gray-800">{new Date(selectedInspection.date).toLocaleDateString()}</Text>
+                </View>
+                
+                <View>
+                  <Text className="text-gray-600 text-sm">Status</Text>
+                  <Text className="text-gray-800">{selectedInspection.status}</Text>
+                </View>
+                
+                <View>
+                  <Text className="text-gray-600 text-sm">Progress</Text>
+                  <Text className="text-gray-800">
+                    {Math.round((Object.values(selectedInspection.categories || {}).filter(Boolean).length / 
+                    Object.keys(selectedInspection.categories || {}).length) * 100) || 0}%
+                  </Text>
+                </View>
+                
+                <View>
+                  <Text className="text-gray-600 text-sm">Sync Status</Text>
+                  <Text className="text-gray-800">{selectedInspection.sync_status}</Text>
+                </View>
+                
+                <View>
+                  <Text className="text-gray-600 text-sm">Created</Text>
+                  <Text className="text-gray-800">{new Date(selectedInspection.created_at).toLocaleDateString()}</Text>
+                </View>
+              </View>
+            )}
+            
+            <TouchableOpacity
+              className="mt-6 bg-blue-500 py-3 rounded-lg"
+              onPress={() => setShowViewModal(false)}
+            >
+              <Text className="text-white text-center font-medium">Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View className="flex-1 bg-black/50 justify-center items-center p-4">
+          <View className="bg-white rounded-lg p-6 w-full max-w-md">
+            <Text className="text-xl font-bold text-gray-800 mb-4">Delete Inspection</Text>
+            
+            <Text className="text-gray-600 mb-6">
+              Are you sure you want to delete this inspection? This action cannot be undone.
+            </Text>
+            
+            {selectedInspection && (
+              <Text className="text-gray-800 font-medium mb-6">
+                {selectedInspection.address}
+              </Text>
+            )}
+            
+            <View className="flex-row space-x-3">
+              <TouchableOpacity
+                className="flex-1 bg-gray-200 py-3 rounded-lg"
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setSelectedInspection(null);
+                }}
+              >
+                <Text className="text-gray-800 text-center font-medium">Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                className="flex-1 bg-red-500 py-3 rounded-lg"
+                onPress={confirmDelete}
+              >
+                <Text className="text-white text-center font-medium">Delete</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };

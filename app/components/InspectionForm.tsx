@@ -27,6 +27,7 @@ import { supabase } from "../../lib/supabase";
 
 type AddressMethod = "google" | "manual" | "assigned";
 type Category =
+  | "Property ID"
   | "Exterior"
   | "Interior"
   | "HVAC"
@@ -56,7 +57,7 @@ const InspectionForm = ({
 }: InspectionFormProps) => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const inspectionId = params.id as string;
+  const inspectionId = (params.id || params.inspectionId) as string;
   
   const { createInspection, getInspectionById } = useInspections();
   const [isLoading, setIsLoading] = useState(inspectionId ? true : false);
@@ -75,6 +76,7 @@ const InspectionForm = ({
     initialData || {
       address: "",
       categories: {
+        "Property ID": {},
         Exterior: {},
         Interior: {},
         HVAC: {},
@@ -106,6 +108,7 @@ const InspectionForm = ({
             
             // Convert database categories format to app format
             const appCategories = {
+              "Property ID": inspection.categories?.property_id ? { completed: true } : {},
               Exterior: inspection.categories?.exterior ? { completed: true } : {},
               Interior: inspection.categories?.interior ? { completed: true } : {},
               HVAC: inspection.categories?.hvac ? { completed: true } : {},
@@ -154,6 +157,7 @@ const InspectionForm = ({
   }, [initialData]);
 
   const categories: Category[] = [
+    "Property ID",
     "Exterior",
     "Interior",
     "HVAC",
@@ -178,12 +182,12 @@ const InspectionForm = ({
     }
   };
 
-  // Function to search addresses using Google Places API directly
+  // Function to search addresses using Google Places API through our proxy
   const searchAddress = async (query: string) => {
     if (isOfflineMode) {
       Alert.alert(
         "Offline Mode",
-        "Address search is not available in offline mode",
+        "Address search is not available in offline mode"
       );
       return;
     }
@@ -198,56 +202,25 @@ const InspectionForm = ({
     try {
       console.log('Searching for address:', query);
       
-      // Check if we're running in a web browser
-      const isWeb = Platform.OS === 'web';
+      // Use the Supabase edge function proxy instead of direct API call
+      const { data, error } = await supabase.functions.invoke('supabase-functions-google-places-proxy', {
+        body: { query }
+      });
       
-      if (isWeb) {
-        // Use Supabase Edge Function for web to avoid CORS issues
-        console.log('Using Supabase Edge Function for web');
-        const { data, error } = await supabase.functions.invoke(
-          'supabase-functions-google-places-proxy',
-          {
-            body: { query }
-          }
-        );
-
-        if (error) {
-          console.error('Supabase function error:', error);
-          throw error;
-        }
-        
-        console.log('Google Places API response via Supabase:', data);
-        
-        if (data && data.status === 'OK' && data.predictions && data.predictions.length > 0) {
-          const suggestions = data.predictions.map((prediction: any) => prediction.description);
-          console.log('Setting suggestions:', suggestions);
-          setAddressSuggestions(suggestions);
-        } else {
-          console.log('No predictions found or API error:', data?.status, data?.error_message);
-          setAddressSuggestions([]);
-        }
+      console.log('Google Places API response:', data);
+      
+      if (error) {
+        console.error('Google Places API error:', error);
+        throw new Error(error.message);
+      }
+      
+      if (data && data.predictions && data.predictions.length > 0) {
+        const suggestions = data.predictions.map((prediction: any) => prediction.description);
+        console.log('Setting suggestions:', suggestions);
+        setAddressSuggestions(suggestions);
       } else {
-        // Direct API call for native platforms
-        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-        if (!apiKey) {
-          throw new Error("Google Maps API key is not configured");
-        }
-        
-        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=address&key=${apiKey}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        console.log('Google Places API response status:', data.status);
-        
-        if (data.status === 'OK' && data.predictions && data.predictions.length > 0) {
-          const suggestions = data.predictions.map((prediction: any) => prediction.description);
-          console.log('Setting suggestions:', suggestions);
-          setAddressSuggestions(suggestions);
-        } else {
-          console.log('No predictions found or API error:', data.status, data.error_message);
-          setAddressSuggestions([]);
-        }
+        console.log('No predictions found or API error:', data?.status, data?.error_message);
+        setAddressSuggestions([]);
       }
     } catch (error) {
       console.error('Google Places API error:', error);
@@ -345,6 +318,7 @@ const InspectionForm = ({
         setFormData({
           address: "",
           categories: {
+            "Property ID": {},
             Exterior: {},
             Interior: {},
             HVAC: {},
@@ -632,6 +606,7 @@ const InspectionForm = ({
               }}
               isFirstCategory={categories.indexOf(selectedCategory) === 0}
               isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+              address={formData.address}
             />
           )}
 
