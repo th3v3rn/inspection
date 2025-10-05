@@ -12,7 +12,13 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "aab",
+        "env": {
+          "EXPO_USE_FAST_RESOLVER": "1"
+        }
+      }
     }
   },
   "submit": {
