@@ -43,7 +43,8 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-speech-recognition"
+      "expo-speech-recognition",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

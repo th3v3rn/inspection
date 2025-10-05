@@ -82,7 +82,7 @@ const InspectionForm = ({
       categories: {
         "Property ID": {},
         Foundation: {},
-        Interior: {},
+        Exterior: {},
         HVAC: {},
         Plumbing: {},
         Electrical: {},
@@ -113,7 +113,7 @@ const InspectionForm = ({
             const appCategories = {
               "Property ID": inspection.categories?.property_id ? { completed: true } : {},
               Foundation: inspection.categories?.foundation || inspection.categories?.exterior ? { completed: true } : {},
-              Interior: inspection.categories?.interior ? { completed: true } : {},
+              Exterior: inspection.categories?.exterior || inspection.categories?.interior ? { completed: true } : {},
               HVAC: inspection.categories?.hvac ? { completed: true } : {},
               Plumbing: inspection.categories?.plumbing ? { completed: true } : {},
               Electrical: inspection.categories?.electrical ? { completed: true } : {},
@@ -161,7 +161,7 @@ const InspectionForm = ({
   const categories = [
     "Property ID",
     "Foundation",
-    "Interior",
+    "Exterior",
     "HVAC",
     "Plumbing",
     "Electrical",
@@ -392,7 +392,7 @@ const InspectionForm = ({
           categories: {
             "Property ID": {},
             Foundation: {},
-            Interior: {},
+            Exterior: {},
             HVAC: {},
             Plumbing: {},
             Electrical: {},

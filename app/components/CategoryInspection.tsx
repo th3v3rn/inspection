@@ -120,6 +120,26 @@ export default function CategoryInspection({
           poolSafety: "",
           generalNotes: "",
         };
+      case "Exterior":
+        return {
+          roofType: "",
+          roofTypePercent: "",
+          numberOfDormers: "",
+          oldHomeWoodSide: false,
+          roofMaterial: "",
+          roofMaterialPercent: "",
+          roofConstructionType: "",
+          exteriorWallConstruction: "",
+          exteriorWallConstructionPercent: "",
+          exteriorWallFinish: "",
+          exteriorWallFinishPercent: "",
+          slidingDoorsCount: "",
+          normalDoorsCount: "",
+          trimDetails: "",
+          windowsCount: "",
+          specialtyWindowsCount: "",
+          generalNotes: "",
+        };
       default:
         return {
           generalNotes: "",
@@ -639,6 +659,116 @@ export default function CategoryInspection({
             placeholder: "Additional safety observations and notes...",
           },
         ];
+      case "Exterior":
+        return [
+          {
+            id: "roofType",
+            label: "Roof Type",
+            type: "dropdown",
+            value: data.roofType,
+            options: ["", "Gable", "Hip", "Flat", "Mansard", "Metal", "Bonnet", "Gambrel", "Shed", "Other"],
+          },
+          {
+            id: "roofTypePercent",
+            label: "Roof Type %",
+            value: data.roofTypePercent,
+            placeholder: "e.g., 100%, 80%, etc.",
+          },
+          {
+            id: "numberOfDormers",
+            label: "Number of Dormers",
+            value: data.numberOfDormers,
+            placeholder: "e.g., 2, 0, etc.",
+          },
+          {
+            id: "oldHomeWoodSide",
+            label: "Old Home Wood Side",
+            type: "checkbox",
+            value: data.oldHomeWoodSide,
+          },
+          {
+            id: "roofMaterial",
+            label: "Roof Material",
+            type: "dropdown",
+            value: data.roofMaterial,
+            options: ["", "Tile", "Shingle", "Metal", "Slate", "Wood", "Membrane", "Composite", "Other"],
+          },
+          {
+            id: "roofMaterialPercent",
+            label: "Roof Material %",
+            value: data.roofMaterialPercent,
+            placeholder: "e.g., 100%, 80%, etc.",
+          },
+          {
+            id: "roofConstructionType",
+            label: "Roof Construction Type",
+            type: "dropdown",
+            value: data.roofConstructionType,
+            options: ["", "Wood Framed", "Steel Framed", "Concrete", "Truss", "Rafter", "Other"],
+          },
+          {
+            id: "exteriorWallConstruction",
+            label: "Exterior Wall Construction",
+            type: "dropdown",
+            value: data.exteriorWallConstruction,
+            options: ["", "Wood", "Concrete", "Brick", "Block", "Steel", "Stone", "Other"],
+          },
+          {
+            id: "exteriorWallConstructionPercent",
+            label: "Exterior Wall Construction %",
+            value: data.exteriorWallConstructionPercent,
+            placeholder: "e.g., 100%, 80%, etc.",
+          },
+          {
+            id: "exteriorWallFinish",
+            label: "Exterior Wall Finish",
+            type: "dropdown",
+            value: data.exteriorWallFinish,
+            options: ["", "Stucco", "Siding", "Shiplap", "Vinyl", "Brick", "Stone", "Fiber Cement", "Wood", "Other"],
+          },
+          {
+            id: "exteriorWallFinishPercent",
+            label: "Exterior Wall Finish %",
+            value: data.exteriorWallFinishPercent,
+            placeholder: "e.g., 100%, 80%, etc.",
+          },
+          {
+            id: "slidingDoorsCount",
+            label: "Sliding Doors Count",
+            value: data.slidingDoorsCount,
+            placeholder: "Number of sliding doors",
+          },
+          {
+            id: "normalDoorsCount",
+            label: "Normal Doors Count",
+            value: data.normalDoorsCount,
+            placeholder: "Number of normal doors",
+          },
+          {
+            id: "trimDetails",
+            label: "Trim Details",
+            value: data.trimDetails,
+            placeholder: "Describe trim condition, material, style, etc.",
+          },
+          {
+            id: "windowsCount",
+            label: "Number of Windows",
+            value: data.windowsCount,
+            placeholder: "Total number of windows",
+          },
+          {
+            id: "specialtyWindowsCount",
+            label: "Number of Specialty Windows",
+            value: data.specialtyWindowsCount,
+            placeholder: "Bay windows, skylights, etc.",
+          },
+          {
+            id: "generalNotes",
+            label: "General Notes",
+            value: data.generalNotes,
+            placeholder: "Additional exterior observations and notes...",
+          },
+        ];
       default:
         return [
           {
@@ -851,6 +981,22 @@ export default function CategoryInspection({
                     ))}
                   </Picker>
                 </View>
+              ) : field.type === "checkbox" ? (
+                <TouchableOpacity
+                  onPress={() => handleInputChange(field.id, !formData[field.id as keyof typeof formData])}
+                  className="flex-row items-center bg-white p-3 border border-gray-300 rounded-lg"
+                >
+                  <View className={`w-6 h-6 border-2 rounded mr-3 items-center justify-center ${
+                    formData[field.id as keyof typeof formData] ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
+                  }`}>
+                    {formData[field.id as keyof typeof formData] && (
+                      <Text className="text-white font-bold">✓</Text>
+                    )}
+                  </View>
+                  <Text className="text-gray-700">
+                    {formData[field.id as keyof typeof formData] ? 'Yes' : 'No'}
+                  </Text>
+                </TouchableOpacity>
               ) : (
                 <TextInput
                   className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
