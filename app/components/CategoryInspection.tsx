@@ -9,10 +9,12 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { speechService } from "../../lib/speechService";
 import { aiFormFillerService } from "../../lib/aiFormFillerService";
 import { imageService, UploadedImage } from "../../lib/imageService";
-import { directPropertyService } from "../../lib/directPropertyService";
+import PropertyIDForm from "./PropertyIDForm";
+import { useProperty } from "../contexts/PropertyContext";
 
 interface CategoryInspectionProps {
   category: string;
@@ -37,30 +39,36 @@ export default function CategoryInspection({
   isLastCategory = false,
   address = "", // Default to empty string
 }: CategoryInspectionProps) {
+  const { propertyData: globalPropertyData, isPropertyDataAvailable } = useProperty();
+  
   const [isRecording, setIsRecording] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [images, setImages] = useState<UploadedImage[]>([]);
-  const [isLoadingPropertyData, setIsLoadingPropertyData] = useState(false);
-  const [apiError, setApiError] = useState<string | null>(null);
 
   // Dynamic form data based on category
   const getInitialFormData = (cat: string) => {
+    const currentYear = new Date().getFullYear();
+    
     switch (cat) {
       case "Property ID":
         return {
-          propertyAddress: "",
-          parcelInformation: "",
-          yearBuilt: "",
-          squareFootage: "",
-          constructionType: "",
-          numberOfStories: "",
-          occupancyType: "",
+          propertyAddress: globalPropertyData?.propertyAddress || "",
+          parcelInformation: globalPropertyData?.parcelInformation || "",
+          yearBuilt: globalPropertyData?.yearBuilt || "",
+          squareFootage: globalPropertyData?.squareFootage || "",
+          constructionType: globalPropertyData?.constructionType || "",
+          numberOfStories: globalPropertyData?.numberOfStories || "",
+          occupancyType: globalPropertyData?.occupancyType || "",
           generalNotes: "",
         };
       case "HVAC":
+        // Calculate age from year built if available
+        const yearBuilt = globalPropertyData?.propertyData?.year_built;
+        const calculatedAge = yearBuilt ? `${currentYear - parseInt(yearBuilt)} years` : "";
+        
         return {
-          hvacType: "",
-          age: "",
+          hvacType: globalPropertyData?.propertyData?.air_conditioner || "",
+          age: calculatedAge,
           ductwork: "",
           maintenanceIndicators: "",
           condition: "",
@@ -69,10 +77,20 @@ export default function CategoryInspection({
       case "Interior":
         return {
           flooring: "",
-          walls: "",
+          walls: globalPropertyData?.propertyData?.interior_structure || "",
           ceilings: "",
           lighting: "",
           outlets: "",
+          generalNotes: "",
+        };
+      case "Foundation":
+        return {
+          foundationType: "",
+          foundationMaterial: "",
+          foundationShape: "",
+          siteSlope: "",
+          basementSqft: globalPropertyData?.propertyData?.propertyData?.attributes?.basement_sqft || "",
+          percentFinished: "",
           generalNotes: "",
         };
       case "Plumbing":
@@ -102,13 +120,8 @@ export default function CategoryInspection({
           poolSafety: "",
           generalNotes: "",
         };
-      default: // Exterior
+      default:
         return {
-          roofType: "",
-          sidingType: "",
-          foundationAndStructure: "",
-          windowsAndDoors: "",
-          propertyHazards: "",
           generalNotes: "",
         };
     }
@@ -125,12 +138,15 @@ export default function CategoryInspection({
     formUpdates: {},
   });
 
-  // Load initial data if provided
+  // Load initial data if provided OR auto-populate from global property data
   useEffect(() => {
     if (initialData && Object.keys(initialData).length > 0) {
       setFormData((prev) => ({ ...prev, ...initialData }));
+    } else if (isPropertyDataAvailable) {
+      // Auto-populate from global property data
+      setFormData(getInitialFormData(category));
     }
-  }, [initialData]);
+  }, [initialData, isPropertyDataAvailable, category]);
 
   // Auto-populate property address from parent component if in Property ID category
   useEffect(() => {
@@ -454,6 +470,55 @@ export default function CategoryInspection({
             placeholder: "Additional observations and notes...",
           },
         ];
+      case "Foundation":
+        return [
+          {
+            id: "foundationType",
+            label: "Foundation Type",
+            type: "dropdown",
+            value: data.foundationType,
+            options: ["", "Crawl Space", "Basement", "Slab", "Pier & Beam", "Combination"],
+          },
+          {
+            id: "foundationMaterial",
+            label: "Foundation Material",
+            type: "dropdown",
+            value: data.foundationMaterial,
+            options: ["", "Concrete", "Concrete Block", "Stone", "Brick", "Wood", "Other"],
+          },
+          {
+            id: "foundationShape",
+            label: "Foundation Shape",
+            type: "dropdown",
+            value: data.foundationShape,
+            options: ["", "Square", "Rectangle", "L-Shape", "H-Shape", "T-Shape", "U-Shape", "Irregular"],
+          },
+          {
+            id: "siteSlope",
+            label: "Site Slope",
+            type: "dropdown",
+            value: data.siteSlope,
+            options: ["", "Mild (0-15 degrees)", "Moderate (16-30 degrees)", "Large (31-45 degrees)", "Severe (>45 degrees)"],
+          },
+          {
+            id: "basementSqft",
+            label: "Basement Square Footage",
+            value: data.basementSqft,
+            placeholder: "Total basement square footage",
+          },
+          {
+            id: "percentFinished",
+            label: "% Finished of Lowest Level",
+            value: data.percentFinished,
+            placeholder: "e.g., 50%, 100%, etc.",
+          },
+          {
+            id: "generalNotes",
+            label: "General Notes",
+            value: data.generalNotes,
+            placeholder: "Additional foundation observations and notes...",
+          },
+        ];
       case "Plumbing":
         return [
           {
@@ -574,39 +639,8 @@ export default function CategoryInspection({
             placeholder: "Additional safety observations and notes...",
           },
         ];
-      default: // Exterior
+      default:
         return [
-          {
-            id: "roofType",
-            label: "Roof Type",
-            value: data.roofType,
-            placeholder: "e.g., Asphalt shingles, Metal, Tile, etc.",
-          },
-          {
-            id: "sidingType",
-            label: "Siding Type",
-            value: data.sidingType,
-            placeholder: "e.g., Vinyl, Wood, Brick, Stucco, etc.",
-          },
-          {
-            id: "foundationAndStructure",
-            label: "Foundation and Structure",
-            value: data.foundationAndStructure,
-            placeholder: "Foundation type, structural condition, cracks, etc.",
-          },
-          {
-            id: "windowsAndDoors",
-            label: "Windows and Doors",
-            value: data.windowsAndDoors,
-            placeholder:
-              "Condition, type, functionality, weatherstripping, etc.",
-          },
-          {
-            id: "propertyHazards",
-            label: "Property Hazards",
-            value: data.propertyHazards,
-            placeholder: "Safety concerns, trip hazards, damaged areas, etc.",
-          },
           {
             id: "generalNotes",
             label: "General Notes",
@@ -622,139 +656,6 @@ export default function CategoryInspection({
       ...prev,
       [field]: value,
     }));
-  };
-
-  // Auto-lookup property data when address is available
-  useEffect(() => {
-    // Only run this effect when category is "Property ID" and address is available
-    if (category !== "Property ID" || !address) return;
-    
-    // Skip if we already have data filled in
-    const hasExistingData = formData.parcelInformation || 
-                           formData.yearBuilt || 
-                           formData.squareFootage;
-    
-    if (hasExistingData) return;
-    
-    // Use a ref to track if component is mounted
-    let isMounted = true;
-    
-    const autoLookupProperty = async () => {
-      try {
-        setIsLoadingPropertyData(true);
-        setApiError(null);
-        console.log("Auto-looking up property data for:", address);
-        
-        // Call the direct property service instead of Supabase edge function
-        const result = await directPropertyService.lookupProperty(address);
-        
-        // Only update state if component is still mounted
-        if (!isMounted) return;
-        
-        console.log("Auto-fill result:", result);
-        
-        if (result.success && result.data) {
-          console.log("Auto-fill successful");
-          // Update form with property data
-          setFormData(prev => ({
-            ...prev,
-            propertyAddress: result.data.propertyAddress || prev.propertyAddress,
-            parcelInformation: result.data.parcelInformation || prev.parcelInformation,
-            yearBuilt: result.data.yearBuilt || prev.yearBuilt,
-            squareFootage: result.data.squareFootage || prev.squareFootage,
-            constructionType: result.data.constructionType || prev.constructionType,
-            numberOfStories: result.data.numberOfStories || prev.numberOfStories,
-            occupancyType: result.data.occupancyType || prev.occupancyType,
-          }));
-        } else if (result.error) {
-          setApiError(result.error);
-          console.error("Auto-fill API error:", result.error);
-        }
-      } catch (error) {
-        if (isMounted) {
-          console.error("Auto-fill error:", error);
-          setApiError(error instanceof Error ? error.message : "Unknown error");
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingPropertyData(false);
-        }
-      }
-    };
-    
-    // Call immediately if we have an address
-    if (address) {
-      autoLookupProperty();
-    }
-    
-    // Cleanup function
-    return () => {
-      isMounted = false;
-    };
-  }, [category, address]);
-
-  const handleAutoFillProperty = async () => {
-    setIsLoadingPropertyData(true);
-    setApiError(null);
-    console.log("Manual auto-fill triggered");
-    
-    try {
-      // Use the address from the form or the prop
-      const addressToUse = formData.propertyAddress || address;
-      
-      if (!addressToUse || addressToUse.trim().length < 5) {
-        setApiError("Please enter a valid address first");
-        return;
-      }
-      
-      // Call the direct property service instead of Supabase edge function
-      const result = await directPropertyService.lookupProperty(addressToUse);
-      console.log("Manual auto-fill result:", result);
-      
-      if (result.success && result.data) {
-        // Update form with property data
-        setFormData(prev => ({
-          ...prev,
-          propertyAddress: result.data.propertyAddress || prev.propertyAddress,
-          parcelInformation: result.data.parcelInformation || prev.parcelInformation,
-          yearBuilt: result.data.yearBuilt || prev.yearBuilt,
-          squareFootage: result.data.squareFootage || prev.squareFootage,
-          constructionType: result.data.constructionType || prev.constructionType,
-          numberOfStories: result.data.numberOfStories || prev.numberOfStories,
-          occupancyType: result.data.occupancyType || prev.occupancyType,
-        }));
-        
-        Alert.alert(
-          "Property Data Loaded", 
-          "Property information has been automatically filled from Smarty API.",
-          [{ text: "OK" }]
-        );
-      } else if (result.error) {
-        setApiError(result.error);
-        Alert.alert(
-          "Property Data Error", 
-          `Could not retrieve property data: ${result.error}`,
-          [{ text: "OK" }]
-        );
-      } else {
-        setApiError("No property data found");
-        Alert.alert(
-          "Property Data Not Found", 
-          "Could not find property data for this address.",
-          [{ text: "OK" }]
-        );
-      }
-    } catch (error) {
-      console.error('Auto-fill error:', error);
-      setApiError(error instanceof Error ? error.message : "Unknown error");
-      Alert.alert(
-        "Auto-Fill Error", 
-        "An error occurred while retrieving property data.",
-        [{ text: "OK" }]
-      );
-    } finally {
-      setIsLoadingPropertyData(false);
-    }
   };
 
   const handleComplete = () => {
@@ -794,6 +695,30 @@ export default function CategoryInspection({
     }
   };
 
+  // If this is the Property ID category, use the dedicated PropertyIDForm component
+  if (category === "Property ID") {
+    return (
+      <PropertyIDForm
+        onComplete={onComplete}
+        onCancel={onCancel}
+        onNext={onNext}
+        onPrevious={onPrevious}
+        isFirstCategory={isFirstCategory}
+        isLastCategory={isLastCategory}
+        initialData={{
+          address: address || formData.propertyAddress || "",
+          numberOfStories: formData.numberOfStories || "",
+          sqft: formData.squareFootage || "",
+          yearBuilt: formData.yearBuilt || "",
+          structureType: formData.constructionType || "",
+          structureUse: formData.occupancyType || "",
+          notes: formData.generalNotes || ""
+        }}
+      />
+    );
+  }
+
+  // For all other categories, use the existing form
   return (
     <ScrollView className="flex-1 bg-gray-50">
       <View className="p-4">
@@ -902,799 +827,42 @@ export default function CategoryInspection({
           </View>
         )}
 
-        {debugInfo.aiResponse && (
-          <View className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
-            <Text className="text-sm font-medium text-green-800 mb-1">
-              AI Response:
-            </Text>
-            <Text className="text-sm text-green-700">
-              {debugInfo.aiResponse}
-            </Text>
-          </View>
-        )}
-
-        {debugInfo.formUpdates &&
-          Object.keys(debugInfo.formUpdates).length > 0 && (
-            <View className="mb-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-              <Text className="text-sm font-medium text-yellow-800 mb-1">
-                Form Updates:
-              </Text>
-              {Object.entries(debugInfo.formUpdates).map(([key, value]) => (
-                <Text key={key} className="text-sm text-yellow-700">
-                  {key}: {String(value)}
-                </Text>
-              ))}
-            </View>
-          )}
-
-        {/* API Error Display */}
-        {apiError && (
-          <View className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
-            <Text className="text-sm font-medium text-red-800 mb-1">
-              API Error:
-            </Text>
-            <Text className="text-sm text-red-700">{apiError}</Text>
-          </View>
-        )}
-
-        {/* Form Fields */}
+        {/* Form Fields - Dynamically rendered based on category */}
         <View className="mb-6">
           <Text className="text-xl font-semibold mb-4 text-gray-800">
             {category} Inspection Form
           </Text>
 
-          {category === "Property ID" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Property Address
-                </Text>
+          {/* Render form fields based on category */}
+          {getFormFields(category, formData).map((field) => (
+            <View key={field.id} className="mb-4">
+              <Text className="text-base font-medium mb-2 text-gray-700">
+                {field.label}
+              </Text>
+              {field.type === "dropdown" ? (
+                <View className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                  <Picker
+                    selectedValue={formData[field.id as keyof typeof formData] || ""}
+                    onValueChange={(value) => handleInputChange(field.id, value)}
+                    style={{ height: 50 }}
+                  >
+                    {field.options?.map((option) => (
+                      <Picker.Item key={option} label={option || "Select..."} value={option} />
+                    ))}
+                  </Picker>
+                </View>
+              ) : (
                 <TextInput
                   className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.propertyAddress || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, propertyAddress: text }))
-                  }
-                  placeholder="Full property address and parcel information"
+                  value={formData[field.id as keyof typeof formData] || ""}
+                  onChangeText={(text) => handleInputChange(field.id, text)}
+                  placeholder={field.placeholder}
                   multiline
                   numberOfLines={3}
                 />
-                
-                {/* Auto-Fill Button */}
-                <TouchableOpacity
-                  onPress={handleAutoFillProperty}
-                  disabled={isLoadingPropertyData || !formData.propertyAddress?.trim()}
-                  className={`mt-3 py-3 px-4 rounded-lg flex-row items-center justify-center ${
-                    isLoadingPropertyData || !formData.propertyAddress?.trim()
-                      ? "bg-gray-400"
-                      : "bg-purple-500"
-                  }`}
-                >
-                  {isLoadingPropertyData ? (
-                    <>
-                      <ActivityIndicator size="small" color="white" />
-                      <Text className="text-white font-semibold ml-2">
-                        Loading Property Data...
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Text className="text-white font-semibold mr-2">🏠</Text>
-                      <Text className="text-white font-semibold">
-                        Auto-Fill Property Data
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-                
-                <Text className="text-xs text-gray-500 mt-2">
-                  Enter an address above and tap "Auto-Fill" to automatically populate property details from Smarty API
-                </Text>
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Parcel Information
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.parcelInformation || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, parcelInformation: text }))
-                  }
-                  placeholder="Parcel number, lot size, zoning information, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Year Built / Age of Structure
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.yearBuilt || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, yearBuilt: text }))
-                  }
-                  placeholder="e.g., Built in 1985, 38 years old, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Square Footage
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.squareFootage || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, squareFootage: text }))
-                  }
-                  placeholder="Total square footage, living area, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Construction Type and Materials
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.constructionType || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, constructionType: text }))
-                  }
-                  placeholder="Frame, brick, concrete block, materials used, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Number of Stories
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.numberOfStories || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, numberOfStories: text }))
-                  }
-                  placeholder="e.g., Single story, Two story, Split level, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Occupancy Type
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.occupancyType || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, occupancyType: text }))
-                  }
-                  placeholder="Owner-occupied, rental, commercial, vacant, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional property identification notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : category === "HVAC" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Type of HVAC
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.hvacType || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, hvacType: text }))
-                  }
-                  placeholder="e.g., Central air, Heat pump, Boiler, Furnace, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Age
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.age || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, age: text }))
-                  }
-                  placeholder="e.g., 5 years old, installed in 2018, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Ductwork
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.ductwork || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, ductwork: text }))
-                  }
-                  placeholder="Condition, material, insulation, leaks, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Maintenance Indicators
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.maintenanceIndicators || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      maintenanceIndicators: text,
-                    }))
-                  }
-                  placeholder="Filter condition, service records, cleanliness, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Condition
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.condition || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, condition: text }))
-                  }
-                  placeholder="Overall condition, functionality, efficiency, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : category === "Interior" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Flooring
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.flooring || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, flooring: text }))
-                  }
-                  placeholder="e.g., Hardwood, Carpet, Tile, Laminate, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Walls
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.walls || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, walls: text }))
-                  }
-                  placeholder="Paint condition, wallpaper, drywall, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Ceilings
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.ceilings || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, ceilings: text }))
-                  }
-                  placeholder="Condition, stains, cracks, texture, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Lighting
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.lighting || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, lighting: text }))
-                  }
-                  placeholder="Fixtures, bulbs, switches, natural light, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Outlets & Switches
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.outlets || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, outlets: text }))
-                  }
-                  placeholder="Functionality, GFCI, placement, condition, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : category === "Plumbing" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Water Pressure
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.waterPressure || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, waterPressure: text }))
-                  }
-                  placeholder="Hot/cold water pressure, flow rate, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Fixtures
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.fixtures || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, fixtures: text }))
-                  }
-                  placeholder="Sinks, toilets, showers, tubs, faucets, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Pipes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.pipes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, pipes: text }))
-                  }
-                  placeholder="Material, condition, visible pipes, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Water Heater
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.waterHeater || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, waterHeater: text }))
-                  }
-                  placeholder="Type, age, condition, capacity, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Leaks & Issues
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.leaks || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, leaks: text }))
-                  }
-                  placeholder="Visible leaks, water damage, drainage, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : category === "Electrical" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Panel Box
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.panelBox || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, panelBox: text }))
-                  }
-                  placeholder="Main panel, breakers, labeling, condition, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Wiring
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.wiring || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, wiring: text }))
-                  }
-                  placeholder="Visible wiring, type, condition, code compliance, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Outlets
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.outlets || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, outlets: text }))
-                  }
-                  placeholder="GFCI, grounding, functionality, placement, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Switches
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.switches || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, switches: text }))
-                  }
-                  placeholder="Light switches, functionality, condition, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Safety Devices
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.safetyDevices || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, safetyDevices: text }))
-                  }
-                  placeholder="Smoke detectors, carbon monoxide, AFCI, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : category === "Hazards" ? (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Exterior Hazards
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.exteriorHazards || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, exteriorHazards: text }))
-                  }
-                  placeholder="Trip hazards, damaged walkways, loose railings, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Roof Hazards
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.roofHazards || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, roofHazards: text }))
-                  }
-                  placeholder="Missing shingles, damaged gutters, ice dams, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Electrical Hazards
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.electricalHazards || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      electricalHazards: text,
-                    }))
-                  }
-                  placeholder="Exposed wiring, overloaded circuits, faulty outlets, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Liability Concerns
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.liabilityConcerns || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      liabilityConcerns: text,
-                    }))
-                  }
-                  placeholder="Pool safety, trampoline, playground equipment, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Pool/Trampoline/Playground/Lighting
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.poolSafety || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, poolSafety: text }))
-                  }
-                  placeholder="Safety barriers, equipment condition, lighting adequacy, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional safety observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Roof Type
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.roofType || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, roofType: text }))
-                  }
-                  placeholder="e.g., Asphalt shingles, Metal, Tile, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Siding Type
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[50px]"
-                  value={formData.sidingType || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, sidingType: text }))
-                  }
-                  placeholder="e.g., Vinyl, Wood, Brick, Stucco, etc."
-                  multiline
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Foundation and Structure
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.foundationAndStructure || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      foundationAndStructure: text,
-                    }))
-                  }
-                  placeholder="Foundation type, structural condition, cracks, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Windows and Doors
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.windowsAndDoors || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, windowsAndDoors: text }))
-                  }
-                  placeholder="Condition, type, functionality, weatherstripping, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  Property Hazards
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[80px]"
-                  value={formData.propertyHazards || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, propertyHazards: text }))
-                  }
-                  placeholder="Safety concerns, trip hazards, damaged areas, etc."
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View className="mb-4">
-                <Text className="text-base font-medium mb-2 text-gray-700">
-                  General Notes
-                </Text>
-                <TextInput
-                  className="bg-white p-3 border border-gray-300 rounded-lg min-h-[100px]"
-                  value={formData.generalNotes || ""}
-                  onChangeText={(text) =>
-                    setFormData((prev) => ({ ...prev, generalNotes: text }))
-                  }
-                  placeholder="Additional observations and notes..."
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
-            </>
-          )}
+              )}
+            </View>
+          ))}
         </View>
 
         {/* Navigation Buttons */}

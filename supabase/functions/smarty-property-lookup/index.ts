@@ -1,211 +1,135 @@
-import { corsHeaders } from "@shared/cors.ts";
-
-interface SmartyPropertyResponse {
-  results?: Array<{
-    analysis?: {
-      active?: string;
-      vacant?: string;
-    };
-    attributes?: {
-      lot_size_acres?: number;
-      living_area?: number;
-      year_built?: number;
-      stories?: number;
-      construction_type?: string;
-      zoning?: string;
-      occupancy_type?: string;
-      parcel_number?: string;
-    };
-    address?: {
-      street?: string;
-      city?: string;
-      state?: string;
-      zipcode?: string;
-    };
-  }>;
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { 
-      headers: corsHeaders,
-      status: 200 
-    });
+    return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
+    console.log('=== Smarty Property Lookup Started ===');
+    
     const { address } = await req.json();
-    console.log("Received address for lookup:", address);
-    
+    console.log('Address to lookup:', address);
+
     if (!address) {
-      console.error("No address provided");
       return new Response(
-        JSON.stringify({ error: 'Address is required' }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 400,
-        }
+        JSON.stringify({ success: false, error: 'Address is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       );
     }
 
-    // Get the Smarty API credentials from environment variables
-    const authId = Deno.env.get('SMARTY_AUTH_ID');
-    const authToken = Deno.env.get('SMARTY_AUTH_TOKEN');
-    console.log("Using Smarty Auth ID:", authId ? "Found" : "Not found");
-    console.log("Using Smarty Auth Token:", authToken ? "Found" : "Not found");
-    
+    const authId = Deno.env.get("SMARTY_AUTH_ID");
+    const authToken = Deno.env.get("SMARTY_AUTH_TOKEN");
+
+    console.log('Auth ID exists:', !!authId);
+    console.log('Auth Token exists:', !!authToken);
+
     if (!authId || !authToken) {
-      console.error("Smarty API credentials not configured");
       return new Response(
-        JSON.stringify({ error: 'Smarty API credentials not configured' }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        }
+        JSON.stringify({ success: false, error: 'Smarty credentials not configured' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
 
-    // Call Smarty US Street API first to validate and standardize address
-    const streetApiUrl = `https://us-street.api.smartystreets.com/street-address?auth-id=${authId}&auth-token=${authToken}&street=${encodeURIComponent(address)}&candidates=1`;
-    console.log("Calling Smarty Street API URL:", streetApiUrl.replace(authToken, '[REDACTED]'));
+    // Step 1: Validate address with US Street API
+    const streetUrl = `https://us-street.api.smarty.com/street-address?auth-id=${authId}&auth-token=${authToken}&street=${encodeURIComponent(address)}`;
     
-    const streetResponse = await fetch(streetApiUrl, {
-      method: 'GET',
-      headers: {
-        'Host': 'us-street.api.smartystreets.com',
-        'User-Agent': 'Home Inspection Pro/1.0',
-        'Referer': 'https://3621be4e-ba60-4a22-93e8-efd8b5b7134c.canvases.tempo.build/'
-      }
-    });
-    console.log("Street API response status:", streetResponse.status);
+    console.log('Step 1: Validating address with Street API...');
+    const streetResponse = await fetch(streetUrl);
     
     if (!streetResponse.ok) {
       const errorText = await streetResponse.text();
-      console.error("Street API error:", errorText);
+      console.error('Street API error:', streetResponse.status, errorText);
       return new Response(
         JSON.stringify({ 
-          error: `Street API error: ${streetResponse.status}`,
+          success: false, 
+          error: `Address validation failed: ${streetResponse.status}`,
           details: errorText
         }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
-    
+
     const streetData = await streetResponse.json();
-    console.log("Street API response data:", JSON.stringify(streetData).substring(0, 200) + "...");
+    console.log('Street API response:', JSON.stringify(streetData, null, 2));
 
     if (!streetData || streetData.length === 0) {
-      console.error("Address not found or invalid");
       return new Response(
-        JSON.stringify({ error: 'Address not found or invalid' }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 404,
-        }
+        JSON.stringify({ success: false, error: 'Address not found or invalid' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
       );
     }
 
     const validatedAddress = streetData[0];
-    const fullAddress = `${validatedAddress.delivery_line_1}, ${validatedAddress.last_line}`;
-    console.log("Validated address:", fullAddress);
+    const components = validatedAddress.components;
 
-    // Now call Property API for detailed property information
-    const propertyApiUrl = `https://us-property.api.smartystreets.com/lookup?auth-id=${authId}&auth-token=${authToken}&street=${encodeURIComponent(validatedAddress.delivery_line_1)}&city=${encodeURIComponent(validatedAddress.components.city_name)}&state=${encodeURIComponent(validatedAddress.components.state_abbreviation)}&zipcode=${encodeURIComponent(validatedAddress.components.zipcode)}`;
-    console.log("Calling Smarty Property API URL:", propertyApiUrl.replace(authToken, '[REDACTED]'));
+    // Step 2: Get property data using US Enrichment API
+    const propertyUrl = `https://us-enrichment.api.smarty.com/lookup?auth-id=${authId}&auth-token=${authToken}&street=${encodeURIComponent(validatedAddress.delivery_line_1)}&city=${encodeURIComponent(components.city_name)}&state=${encodeURIComponent(components.state_abbreviation)}&zipcode=${encodeURIComponent(components.zipcode)}&dataset=property`;
     
-    const propertyResponse = await fetch(propertyApiUrl, {
-      method: 'GET',
-      headers: {
-        'Host': 'us-property.api.smartystreets.com',
-        'User-Agent': 'Home Inspection Pro/1.0',
-        'Referer': 'https://3621be4e-ba60-4a22-93e8-efd8b5b7134c.canvases.tempo.build/'
-      }
-    });
-    console.log("Property API response status:", propertyResponse.status);
+    console.log('Step 2: Getting property data...');
+    const propertyResponse = await fetch(propertyUrl);
+    
+    console.log('Property API status:', propertyResponse.status);
     
     if (!propertyResponse.ok) {
       const errorText = await propertyResponse.text();
-      console.error("Property API error:", errorText);
+      console.error('Property API error:', propertyResponse.status, errorText);
       return new Response(
         JSON.stringify({ 
-          error: `Property API error: ${propertyResponse.status}`,
-          details: errorText
+          success: false, 
+          error: `Property lookup failed: ${propertyResponse.status}`,
+          details: errorText,
+          message: propertyResponse.status === 402 ? 'Payment Required - Property API access needed' : undefined
         }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 500,
-        }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       );
     }
+
+    const propertyData = await propertyResponse.json();
+    console.log('Property API response:', JSON.stringify(propertyData, null, 2));
+
+    if (!propertyData || propertyData.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No property data found' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
+      );
+    }
+
+    // Extract property data
+    const property = propertyData[0];
+    const financial = property.financial || {};
+    const structure = property.structure || {};
     
-    const propertyData: SmartyPropertyResponse = await propertyResponse.json();
-    console.log("Property API response data:", JSON.stringify(propertyData).substring(0, 200) + "...");
-
-    if (!propertyData.results || propertyData.results.length === 0) {
-      console.error("Property data not found");
-      return new Response(
-        JSON.stringify({ 
-          error: 'Property data not found',
-          validatedAddress: fullAddress 
-        }),
-        {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 404,
-        }
-      );
-    }
-
-    const property = propertyData.results[0];
-    const attributes = property.attributes || {};
-    const analysis = property.analysis || {};
-
-    // Format the response for our Property ID form
-    const propertyInfo = {
-      propertyAddress: fullAddress,
-      parcelInformation: attributes.parcel_number ? 
-        `Parcel #: ${attributes.parcel_number}${attributes.lot_size_acres ? `, Lot Size: ${attributes.lot_size_acres} acres` : ''}${attributes.zoning ? `, Zoned: ${attributes.zoning}` : ''}` : 
-        `${attributes.lot_size_acres ? `Lot Size: ${attributes.lot_size_acres} acres` : ''}${attributes.zoning ? `, Zoned: ${attributes.zoning}` : ''}`,
-      yearBuilt: attributes.year_built ? 
-        `Built in ${attributes.year_built}, approximately ${new Date().getFullYear() - attributes.year_built} years old` : '',
-      squareFootage: attributes.living_area ? 
-        `${attributes.living_area.toLocaleString()} sq ft living area` : '',
-      constructionType: attributes.construction_type || '',
-      numberOfStories: attributes.stories ? 
-        `${attributes.stories} ${attributes.stories === 1 ? 'story' : 'stories'}` : '',
-      occupancyType: analysis.vacant === 'Y' ? 'Vacant' : 
-        (analysis.active === 'Y' ? 'Occupied' : 
-        (attributes.occupancy_type || '')),
-      rawData: {
-        attributes,
-        analysis,
-        validatedAddress
-      }
+    const formattedData = {
+      propertyAddress: validatedAddress.delivery_line_1,
+      parcelInformation: property.parcel_id || 'N/A',
+      yearBuilt: structure.year_built || 'N/A',
+      squareFootage: structure.total_area_sq_ft || 'N/A',
+      constructionType: structure.construction_type || 'N/A',
+      numberOfStories: structure.stories || 'N/A',
+      occupancyType: structure.occupancy_type || 'N/A',
+      assessedValue: financial.assessed_value || 'N/A',
+      rawData: property
     };
 
-    console.log("Returning property info:", JSON.stringify(propertyInfo).substring(0, 200) + "...");
+    console.log('Property data extracted successfully');
+
     return new Response(
-      JSON.stringify({ success: true, data: propertyInfo }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
+      JSON.stringify({ success: true, data: formattedData }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
 
   } catch (error) {
-    console.error('Smarty API Error:', error);
+    console.error('Unexpected error:', error);
     return new Response(
       JSON.stringify({ 
-        error: 'Failed to fetch property data',
-        details: error.message 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error'
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
 });

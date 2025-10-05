@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   SafeAreaView,
   Modal,
+  Alert,
+  Share,
 } from "react-native";
 import { useInspections } from "../../hooks/useInspections";
 import { useRouter } from "expo-router";
@@ -32,11 +34,60 @@ const SavedInspectionsList = () => {
   const [filterStatus, setFilterStatus] = useState<"all" | "complete" | "incomplete">("all");
   const [filterSync, setFilterSync] = useState<"all" | "synced" | "not-synced">("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState<string | null>(null);
   
   // Modal states
   const [showViewModal, setShowViewModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
+
+  // Handle export inspection
+  const handleExportInspection = async (id: string) => {
+    console.log('Export button pressed for inspection:', id);
+    setExporting(id);
+    
+    try {
+      const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+      const projectRef = supabaseUrl?.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+      const edgeFunctionUrl = `https://${projectRef}.supabase.co/functions/v1/supabase-functions-export-inspection`;
+      
+      const response = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`
+        },
+        body: JSON.stringify({ 
+          inspectionId: id,
+          format: 'json' 
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Convert to pretty JSON string
+        const jsonString = JSON.stringify(result.data, null, 2);
+        
+        // Share the JSON data
+        await Share.share({
+          message: jsonString,
+          title: `Inspection Export - ${result.data.address}`,
+        });
+      } else {
+        Alert.alert('Export Failed', result.error || 'Unable to export inspection');
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      Alert.alert('Export Error', err instanceof Error ? err.message : 'Failed to export inspection');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   // Filter inspections based on search query and filters
   const filteredInspections = inspections.filter((inspection) => {
@@ -172,7 +223,7 @@ const SavedInspectionsList = () => {
 
         <View className="flex-row justify-end pt-2 border-t border-gray-100">
           <TouchableOpacity
-            className="mr-4 p-3 rounded-lg bg-blue-50 min-w-[44] min-h-[44] items-center justify-center"
+            className="mr-3 p-3 rounded-lg bg-blue-50 min-w-[44] min-h-[44] items-center justify-center"
             onPress={() => handleViewInspection(item.id)}
             activeOpacity={0.7}
           >
@@ -180,11 +231,24 @@ const SavedInspectionsList = () => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            className="mr-4 p-3 rounded-lg bg-amber-50 min-w-[44] min-h-[44] items-center justify-center"
+            className="mr-3 p-3 rounded-lg bg-amber-50 min-w-[44] min-h-[44] items-center justify-center"
             onPress={() => handleEditInspection(item.id)}
             activeOpacity={0.7}
           >
             <Text className="text-amber-600 text-lg">✏️</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            className="mr-3 p-3 rounded-lg bg-green-50 min-w-[44] min-h-[44] items-center justify-center"
+            onPress={() => handleExportInspection(item.id)}
+            activeOpacity={0.7}
+            disabled={exporting === item.id}
+          >
+            {exporting === item.id ? (
+              <ActivityIndicator size="small" color="#16a34a" />
+            ) : (
+              <Text className="text-green-600 text-lg">📤</Text>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity

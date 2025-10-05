@@ -15,8 +15,9 @@ import { Wifi, WifiOff, Plus, List, RefreshCw } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useInspections } from "../hooks/useInspections";
 import InspectionForm from "./components/InspectionForm";
+import { PropertyProvider } from "./contexts/PropertyContext";
 
-export default function HomeScreen() {
+function HomeScreenContent() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const inspectionId = params.inspectionId as string;
@@ -210,5 +211,13 @@ export default function HomeScreen() {
         </View>
       </View>
     </SafeAreaView>
+  );
+}
+
+export default function HomeScreen() {
+  return (
+    <PropertyProvider>
+      <HomeScreenContent />
+    </PropertyProvider>
   );
 }
