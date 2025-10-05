@@ -21,12 +21,16 @@ import {
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import CategoryInspection from "./CategoryInspection";
+import PropertyIDForm from "./PropertyIDForm";
 import PropertyOutlineTool from "./PropertyOutlineTool";
 import { useInspections } from "../../hooks/useInspections";
 import { supabase } from "../../lib/supabase";
+import { useProperty } from "../contexts/PropertyContext";
+import { directPropertyService } from "../../lib/directPropertyService";
 
 type AddressMethod = "google" | "manual" | "assigned";
 type Category =
+  | "Property ID"
   | "Exterior"
   | "Interior"
   | "HVAC"
@@ -56,9 +60,10 @@ const InspectionForm = ({
 }: InspectionFormProps) => {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const inspectionId = params.id as string;
+  const inspectionId = (params.id || params.inspectionId) as string;
   
   const { createInspection, getInspectionById } = useInspections();
+  const { setPropertyData } = useProperty();
   const [isLoading, setIsLoading] = useState(inspectionId ? true : false);
   const [step, setStep] = useState<number>(inspectionId ? 2 : 1); // Start at category selection if editing
   const [addressMethod, setAddressMethod] = useState<AddressMethod>("google");
@@ -75,13 +80,13 @@ const InspectionForm = ({
     initialData || {
       address: "",
       categories: {
-        Exterior: {},
+        "Property ID": {},
+        Foundation: {},
         Interior: {},
         HVAC: {},
         Plumbing: {},
         Electrical: {},
         Hazards: {},
-        Other: {},
       },
       propertyOutline: null,
       measurements: {},
@@ -106,13 +111,13 @@ const InspectionForm = ({
             
             // Convert database categories format to app format
             const appCategories = {
-              Exterior: inspection.categories?.exterior ? { completed: true } : {},
+              "Property ID": inspection.categories?.property_id ? { completed: true } : {},
+              Foundation: inspection.categories?.foundation || inspection.categories?.exterior ? { completed: true } : {},
               Interior: inspection.categories?.interior ? { completed: true } : {},
               HVAC: inspection.categories?.hvac ? { completed: true } : {},
               Plumbing: inspection.categories?.plumbing ? { completed: true } : {},
               Electrical: inspection.categories?.electrical ? { completed: true } : {},
               Hazards: inspection.categories?.hazards ? { completed: true } : {},
-              Other: inspection.categories?.other ? { completed: true } : {},
             };
             
             // Set form data with loaded inspection
@@ -153,15 +158,55 @@ const InspectionForm = ({
     }
   }, [initialData]);
 
-  const categories: Category[] = [
-    "Exterior",
+  const categories = [
+    "Property ID",
+    "Foundation",
     "Interior",
     "HVAC",
     "Plumbing",
     "Electrical",
     "Hazards",
-    "Other",
   ];
+
+  // Function to fetch property data from Smarty API
+  const fetchPropertyData = async (selectedAddress: string) => {
+    try {
+      console.log("=== Fetching Property Data ===");
+      console.log("Address:", selectedAddress);
+      
+      const result = await directPropertyService.lookupProperty(selectedAddress);
+      
+      console.log("API Result:", result);
+      
+      if (result.success && result.data) {
+        console.log("✅ Property data fetched successfully");
+        console.log("Property data:", JSON.stringify(result.data, null, 2));
+        
+        const propertyContextData = {
+          fullAddress: selectedAddress,
+          propertyAddress: selectedAddress,
+          propertyData: result.data,
+        };
+        
+        console.log("Setting PropertyContext with:", JSON.stringify(propertyContextData, null, 2));
+        
+        // Store in PropertyContext
+        setPropertyData(propertyContextData);
+        
+        // Also store in formData for direct access
+        setFormData((prev) => ({
+          ...prev,
+          propertyApiData: result.data,
+        }));
+        
+        console.log("✅ PropertyContext updated");
+      } else {
+        console.warn("❌ Failed to fetch property data:", result.error);
+      }
+    } catch (error) {
+      console.error("❌ Error fetching property data:", error);
+    }
+  };
 
   // Function to handle back button press
   const handleBackButton = () => {
@@ -178,12 +223,12 @@ const InspectionForm = ({
     }
   };
 
-  // Function to search addresses using Google Places API directly
+  // Function to search addresses using Google Places API through our proxy
   const searchAddress = async (query: string) => {
     if (isOfflineMode) {
       Alert.alert(
         "Offline Mode",
-        "Address search is not available in offline mode",
+        "Address search is not available in offline mode"
       );
       return;
     }
@@ -198,56 +243,25 @@ const InspectionForm = ({
     try {
       console.log('Searching for address:', query);
       
-      // Check if we're running in a web browser
-      const isWeb = Platform.OS === 'web';
+      // Use the Supabase edge function proxy instead of direct API call
+      const { data, error } = await supabase.functions.invoke('supabase-functions-google-places-proxy', {
+        body: { query }
+      });
       
-      if (isWeb) {
-        // Use Supabase Edge Function for web to avoid CORS issues
-        console.log('Using Supabase Edge Function for web');
-        const { data, error } = await supabase.functions.invoke(
-          'supabase-functions-google-places-proxy',
-          {
-            body: { query }
-          }
-        );
-
-        if (error) {
-          console.error('Supabase function error:', error);
-          throw error;
-        }
-        
-        console.log('Google Places API response via Supabase:', data);
-        
-        if (data && data.status === 'OK' && data.predictions && data.predictions.length > 0) {
-          const suggestions = data.predictions.map((prediction: any) => prediction.description);
-          console.log('Setting suggestions:', suggestions);
-          setAddressSuggestions(suggestions);
-        } else {
-          console.log('No predictions found or API error:', data?.status, data?.error_message);
-          setAddressSuggestions([]);
-        }
+      console.log('Google Places API response:', data);
+      
+      if (error) {
+        console.error('Google Places API error:', error);
+        throw new Error(error.message);
+      }
+      
+      if (data && data.predictions && data.predictions.length > 0) {
+        const suggestions = data.predictions.map((prediction: any) => prediction.description);
+        console.log('Setting suggestions:', suggestions);
+        setAddressSuggestions(suggestions);
       } else {
-        // Direct API call for native platforms
-        const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-        if (!apiKey) {
-          throw new Error("Google Maps API key is not configured");
-        }
-        
-        const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&types=address&key=${apiKey}`;
-        
-        const response = await fetch(url);
-        const data = await response.json();
-        
-        console.log('Google Places API response status:', data.status);
-        
-        if (data.status === 'OK' && data.predictions && data.predictions.length > 0) {
-          const suggestions = data.predictions.map((prediction: any) => prediction.description);
-          console.log('Setting suggestions:', suggestions);
-          setAddressSuggestions(suggestions);
-        } else {
-          console.log('No predictions found or API error:', data.status, data.error_message);
-          setAddressSuggestions([]);
-        }
+        console.log('No predictions found or API error:', data?.status, data?.error_message);
+        setAddressSuggestions([]);
       }
     } catch (error) {
       console.error('Google Places API error:', error);
@@ -262,6 +276,12 @@ const InspectionForm = ({
     setAddress(selectedAddress);
     setAddressSuggestions([]);
     setFormData((prev) => ({ ...prev, address: selectedAddress }));
+    
+    console.log("=== Address Selected ===");
+    console.log("Selected address:", selectedAddress);
+    
+    // Fetch property data from Smarty API immediately
+    fetchPropertyData(selectedAddress);
   };
 
   const handleCategorySelect = (category: Category) => {
@@ -280,6 +300,31 @@ const InspectionForm = ({
 
     // Don't automatically navigate away - let user use Next/Previous buttons
     // Only show property outline tool if explicitly requested
+  };
+
+  const handleNextCategory = () => {
+    if (selectedCategory) {
+      const currentIndex = categories.indexOf(selectedCategory);
+      if (currentIndex < categories.length - 1) {
+        const nextCategory = categories[currentIndex + 1];
+        setSelectedCategory(nextCategory);
+      }
+    }
+  };
+
+  const handlePreviousCategory = () => {
+    if (selectedCategory) {
+      const currentIndex = categories.indexOf(selectedCategory);
+      if (currentIndex > 0) {
+        const prevCategory = categories[currentIndex - 1];
+        setSelectedCategory(prevCategory);
+      }
+    }
+  };
+
+  const handleCancelCategory = () => {
+    setSelectedCategory(null);
+    setStep(2);
   };
 
   const handlePropertyOutlineComplete = (outlineData: any) => {
@@ -345,13 +390,13 @@ const InspectionForm = ({
         setFormData({
           address: "",
           categories: {
-            Exterior: {},
+            "Property ID": {},
+            Foundation: {},
             Interior: {},
             HVAC: {},
             Plumbing: {},
             Electrical: {},
             Hazards: {},
-            Other: {},
           },
           propertyOutline: null,
           measurements: {},
@@ -530,7 +575,7 @@ const InspectionForm = ({
         <ScrollView className="mb-4">
           {categories.map((category, index) => {
             const isCompleted =
-              Object.keys(formData.categories[category]).length > 0;
+              formData.categories[category] && Object.keys(formData.categories[category]).length > 0;
 
             return (
               <TouchableOpacity
@@ -608,31 +653,50 @@ const InspectionForm = ({
           {step === 2 && !showPropertyOutlineTool && renderCategorySelection()}
 
           {step === 3 && selectedCategory && (
-            <CategoryInspection
-              category={selectedCategory}
-              initialData={formData.categories[selectedCategory]}
-              onComplete={handleCategoryComplete}
-              onCancel={() => {
-                setSelectedCategory(null);
-                setStep(2);
-              }}
-              onNext={() => {
-                const currentIndex = categories.indexOf(selectedCategory);
-                if (currentIndex < categories.length - 1) {
-                  const nextCategory = categories[currentIndex + 1];
-                  setSelectedCategory(nextCategory);
-                }
-              }}
-              onPrevious={() => {
-                const currentIndex = categories.indexOf(selectedCategory);
-                if (currentIndex > 0) {
-                  const prevCategory = categories[currentIndex - 1];
-                  setSelectedCategory(prevCategory);
-                }
-              }}
-              isFirstCategory={categories.indexOf(selectedCategory) === 0}
-              isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-            />
+            <>
+              {selectedCategory === "Property ID" ? (
+                <PropertyIDForm
+                  key={formData.address || "property-id-form"}
+                  onComplete={handleCategoryComplete}
+                  onCancel={handleCancelCategory}
+                  onNext={handleNextCategory}
+                  onPrevious={handlePreviousCategory}
+                  isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                  isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                  initialData={{ 
+                    address: formData.address,
+                    propertyApiData: formData.propertyApiData,
+                  }}
+                />
+              ) : (
+                <CategoryInspection
+                  category={selectedCategory}
+                  initialData={formData.categories[selectedCategory]}
+                  onComplete={handleCategoryComplete}
+                  onCancel={() => {
+                    setSelectedCategory(null);
+                    setStep(2);
+                  }}
+                  onNext={() => {
+                    const currentIndex = categories.indexOf(selectedCategory);
+                    if (currentIndex < categories.length - 1) {
+                      const nextCategory = categories[currentIndex + 1];
+                      setSelectedCategory(nextCategory);
+                    }
+                  }}
+                  onPrevious={() => {
+                    const currentIndex = categories.indexOf(selectedCategory);
+                    if (currentIndex > 0) {
+                      const prevCategory = categories[currentIndex - 1];
+                      setSelectedCategory(prevCategory);
+                    }
+                  }}
+                  isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                  isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                  address={formData.address}
+                />
+              )}
+            </>
           )}
 
           {showPropertyOutlineTool && (

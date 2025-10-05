@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, type Database } from '../lib/supabase';
 
 type Inspection = Database['public']['Tables']['inspections']['Row'];
@@ -52,8 +52,8 @@ export const useInspections = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch all inspections
-  const fetchInspections = async () => {
+  // Fetch all inspections - use useCallback to prevent infinite loops
+  const fetchInspections = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -86,10 +86,10 @@ export const useInspections = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // Empty dependency array since this function doesn't depend on any props or state
 
-  // Get inspection by ID
-  const getInspectionById = async (id: string) => {
+  // Get inspection by ID - use useCallback
+  const getInspectionById = useCallback(async (id: string) => {
     try {
       setLoading(true);
       
@@ -121,7 +121,7 @@ export const useInspections = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Create new inspection
   const createInspection = async (inspection: any) => {
@@ -287,7 +287,7 @@ export const useInspections = () => {
     }
   };
 
-  // Subscribe to real-time changes
+  // Subscribe to real-time changes - fix the useEffect dependency
   useEffect(() => {
     fetchInspections();
 
@@ -325,7 +325,7 @@ export const useInspections = () => {
       console.error('Error setting up realtime subscription:', err);
       return () => {};
     }
-  }, []);
+  }, [fetchInspections]); // Now fetchInspections is stable due to useCallback
 
   return {
     inspections,
