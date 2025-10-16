@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,215 +9,496 @@ import {
   ActivityIndicator,
   Platform,
   AppState,
+  StyleSheet,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Wifi, WifiOff, Plus, List, RefreshCw } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useInspections } from "../hooks/useInspections";
 import InspectionForm from "./components/InspectionForm";
-import { PropertyProvider } from "./contexts/PropertyContext";
+import LoginScreen from "./components/LoginScreen";
+import AdminDashboard from "./components/AdminDashboard";
+import { PropertyProvider, useProperty } from "./contexts/PropertyContext";
+import { supabase } from "../lib/supabase";
+import { Database } from "../src/types/supabase";
+import { lookupPropertyBySmarty } from "../lib/smartyPropertyService";
+import AssignedPropertiesList from './components/AssignedPropertiesList';
+import SavedInspectionsList from './components/SavedInspectionsList';
 
-function HomeScreenContent() {
-  const router = useRouter();
-  const params = useLocalSearchParams();
-  const inspectionId = params.inspectionId as string;
-  
-  const { inspections, loading, refetch } = useInspections();
-  const [isOnline, setIsOnline] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+type User = Database['public']['Tables']['users']['Row'];
 
-  // If inspectionId is provided, show the InspectionForm directly
-  if (inspectionId) {
+export default function Index() {
+  const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inspection' | 'saved' | 'admin' | 'assigned'>('dashboard');
+  const [selectedInspection, setSelectedInspection] = useState<any>(null);
+  const [recentInspections, setRecentInspections] = useState<any[]>([]);
+
+  useEffect(() => {
+    console.log('=== Starting auth check ===');
+    
+    // Set a timeout to prevent infinite loading
+    const timeout = setTimeout(() => {
+      console.log('Auth check timeout - proceeding without session');
+      setCheckingAuth(false);
+    }, 5000); // 5 second timeout
+    
+    const checkUser = async () => {
+      try {
+        console.log('Calling getSession...');
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        console.log('getSession response:', { 
+          hasSession: !!session, 
+          hasUser: !!session?.user,
+          error: error?.message 
+        });
+        
+        if (error) {
+          console.error('Auth error:', error);
+        }
+        
+        setUser(session?.user ?? null);
+        
+        // Load user role from public.users table
+        if (session?.user) {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (userError) {
+            console.error('Error loading user role:', userError);
+          } else {
+            console.log('User role:', userData?.role);
+            setUserRole(userData?.role || null);
+          }
+          
+          loadRecentInspections(session.user.id);
+        }
+        
+        console.log('Auth check complete, user:', session?.user?.email || 'none');
+      } catch (err) {
+        console.error('Exception during auth check:', err);
+      } finally {
+        clearTimeout(timeout);
+        console.log('Setting checkingAuth to false');
+        setCheckingAuth(false);
+      }
+    };
+
+    checkUser();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        
+        // Load user role
+        const { data: userData } = await supabase
+          .from('users')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        
+        setUserRole(userData?.role || null);
+        loadRecentInspections(session.user.id);
+      } else {
+        setUser(null);
+        setUserRole(null);
+        setRecentInspections([]);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const loadRecentInspections = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      setRecentInspections(data || []);
+    } catch (error) {
+      console.error('Error loading recent inspections:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setUserRole(null);
+      setCurrentView('dashboard');
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
+  if (checkingAuth) {
     return (
-      <InspectionForm 
-        onCancel={() => router.replace("/")}
-        onSave={() => router.replace("/")}
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#9ca3af" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!user) {
+    return <LoginScreen onLoginSuccess={() => setUser(user)} />;
+  }
+
+  // Show Admin Dashboard
+  if (currentView === 'admin') {
+    return (
+      <AdminDashboard 
+        currentUser={user}
+        onBack={() => setCurrentView('dashboard')}
+        onNavigateToPropertyLookup={() => setCurrentView('inspection')}
       />
     );
   }
 
-  // Get recent inspections (last 3)
-  const recentInspections = inspections.slice(0, 3).map(inspection => ({
-    id: inspection.id,
-    address: inspection.address,
-    date: new Date(inspection.date).toLocaleDateString(),
-    status: inspection.status === 'complete' ? 'Complete' : 'In Progress',
-    synced: inspection.sync_status === 'synced',
-  }));
+  // Show Assigned Inspections List
+  if (currentView === 'assigned') {
+    return (
+      <AssignedPropertiesList
+        currentUser={user}
+        onSelectInspection={(inspection) => {
+          setSelectedInspection(inspection);
+          setCurrentView('inspection');
+        }}
+        onBack={() => setCurrentView('dashboard')}
+      />
+    );
+  }
 
-  // Fetch inspections on mount
-  useEffect(() => {
-    console.log("Home screen mounted, fetching inspections...");
-    refetch();
-  }, []);
+  // Show Saved Inspections List
+  if (currentView === 'saved') {
+    return (
+      <SavedInspectionsList
+        currentUser={user}
+        onSelectInspection={(inspection) => {
+          setSelectedInspection(inspection);
+          setCurrentView('inspection');
+        }}
+        onBack={() => {
+          loadRecentInspections(user.id);
+          setCurrentView('dashboard');
+        }}
+        onInspectionDeleted={() => {
+          loadRecentInspections(user.id);
+        }}
+      />
+    );
+  }
 
-  // More stable network status check
-  useEffect(() => {
-    // Set initial state to online
-    setIsOnline(true);
-    
-    // Only check network status when app comes to foreground
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (nextAppState === 'active') {
-        // In a real app, this would use NetInfo or similar to check actual connectivity
-        // For now, we'll just assume online for demo purposes
-        setIsOnline(true);
-      }
-    });
+  // Show Inspection Form (either new or editing)
+  if (currentView === 'inspection') {
+    return (
+      <PropertyProvider>
+        <InspectionForm
+          currentUser={user}
+          inspectionId={selectedInspection?.id}
+          initialData={selectedInspection}
+          onCancel={() => {
+            setSelectedInspection(null);
+            setCurrentView('dashboard');
+          }}
+          onComplete={() => {
+            setSelectedInspection(null);
+            setCurrentView('dashboard');
+          }}
+          onSave={() => {
+            setSelectedInspection(null);
+            setCurrentView('dashboard');
+          }}
+        />
+      </PropertyProvider>
+    );
+  }
 
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  const handleNewInspection = () => {
-    router.push("/components/InspectionForm");
-  };
-
-  const handleViewSavedInspections = () => {
-    router.push("/components/SavedInspectionsList");
-  };
-
-  const handleSyncData = async () => {
-    setSyncing(true);
-    await refetch();
-    // Simulate sync delay
-    setTimeout(() => {
-      setSyncing(false);
-    }, 1000);
-  };
-
-  const handleInspectionPress = (id) => {
-    // Use replace instead of push to prevent navigation stacking
-    router.replace(`/components/InspectionForm?id=${id}`);
-  };
-
+  // Default dashboard view
   return (
-    <SafeAreaView className="flex-1 bg-gray-100">
-      <StatusBar barStyle="dark-content" />
-      <View className="flex-1 p-4">
-        {/* Header with logo and connection status */}
-        <View className="flex-row justify-between items-center mb-6">
-          <View className="flex-row items-center">
-            <Image
-              source={require("../assets/images/icon.png")}
-              style={{ width: 40, height: 40 }}
-              className="rounded-md"
-            />
-            <Text className="text-2xl font-bold ml-2 text-blue-800">
-              Home Inspection Pro
-            </Text>
-          </View>
-          <View className="flex-row items-center">
-            {isOnline ? (
-              <Wifi size={20} color="#10b981" />
-            ) : (
-              <WifiOff size={20} color="#ef4444" />
-            )}
-            <Text
-              className={`ml-1 ${isOnline ? "text-green-600" : "text-red-500"}`}
-            >
-              {isOnline ? "Online" : "Offline"}
-            </Text>
-          </View>
-        </View>
-
-        {/* Main action buttons */}
-        <View className="flex-row justify-between mb-8">
-          <TouchableOpacity
-            className="bg-blue-600 rounded-xl py-4 px-6 flex-1 mr-2 items-center"
-            onPress={handleNewInspection}
-          >
-            <Plus size={24} color="#ffffff" />
-            <Text className="text-white font-bold mt-2">New Inspection</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            className="bg-gray-700 rounded-xl py-4 px-6 flex-1 ml-2 items-center"
-            onPress={handleViewSavedInspections}
-          >
-            <List size={24} color="#ffffff" />
-            <Text className="text-white font-bold mt-2">Saved Inspections</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Sync button */}
-        <TouchableOpacity
-          className={`rounded-xl py-3 px-6 mb-6 items-center flex-row justify-center ${isOnline ? "bg-green-600" : "bg-gray-400"}`}
-          onPress={handleSyncData}
-          disabled={!isOnline || syncing}
-        >
-          {syncing ? (
-            <ActivityIndicator size="small" color="#ffffff" />
-          ) : (
-            <RefreshCw size={20} color="#ffffff" />
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Pulse Inspections</Text>
+          <Text style={styles.headerSubtitle}>Welcome, {user?.email}</Text>
+          {userRole && (
+            <Text style={styles.roleText}>Role: {userRole}</Text>
           )}
-          <Text className="text-white font-bold ml-2">
-            {syncing ? "Syncing..." : "Sync Data"}
-          </Text>
-        </TouchableOpacity>
+        </View>
 
-        {/* Recent inspections */}
-        <View className="flex-1 bg-white rounded-xl p-4 shadow-sm">
-          <View className="flex-row justify-between items-center mb-4">
-            <Text className="text-lg font-bold text-gray-800">
-              Recent Inspections
-            </Text>
-            <TouchableOpacity onPress={refetch}>
-              <RefreshCw size={16} color="#3b82f6" />
+        {/* Main Content */}
+        <ScrollView style={styles.scrollView}>
+          {/* Top 3 Buttons */}
+          <View style={styles.topButtonsContainer}>
+            <TouchableOpacity
+              style={styles.topButton}
+              onPress={() => {
+                setSelectedInspection(null);
+                setCurrentView('inspection');
+              }}
+            >
+              <Text style={styles.topButtonText}>New Inspection</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.topButton}
+              onPress={() => setCurrentView('assigned')}
+            >
+              <Text style={styles.topButtonText}>Assigned Inspections</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.topButton}
+              onPress={() => setCurrentView('saved')}
+            >
+              <Text style={styles.topButtonText}>Saved Inspections</Text>
             </TouchableOpacity>
           </View>
 
-          {loading ? (
-            <View className="items-center justify-center py-8">
-              <ActivityIndicator size="large" color="#3b82f6" />
-            </View>
-          ) : (
-            <ScrollView className="flex-1">
+          {/* Recent Inspections Section */}
+          {recentInspections.length > 0 && (
+            <View style={styles.recentSection}>
+              <Text style={styles.sectionTitle}>Recent Inspections</Text>
               {recentInspections.map((inspection) => (
                 <TouchableOpacity
                   key={inspection.id}
-                  className="border-b border-gray-200 py-3"
-                  onPress={() => handleInspectionPress(inspection.id)}
+                  style={styles.recentInspectionCard}
+                  onPress={() => {
+                    setSelectedInspection(inspection);
+                    setCurrentView('inspection');
+                  }}
                 >
-                  <Text className="font-medium text-gray-800">
-                    {inspection.address}
-                  </Text>
-                  <View className="flex-row justify-between mt-1">
-                    <Text className="text-gray-500">{inspection.date}</Text>
-                    <View className="flex-row">
-                      <Text
-                        className={`mr-2 ${inspection.status === "Complete" ? "text-green-600" : "text-amber-500"}`}
-                      >
-                        {inspection.status}
+                  <View style={styles.recentInspectionHeader}>
+                    <Text style={styles.recentInspectionAddress} numberOfLines={1}>
+                      {inspection.address}
+                    </Text>
+                    <View style={[
+                      styles.statusBadge,
+                      inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
+                    ]}>
+                      <Text style={[
+                        styles.statusText,
+                        inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
+                      ]}>
+                        {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
                       </Text>
-                      {inspection.synced ? (
-                        <Text className="text-green-600">Synced</Text>
-                      ) : (
-                        <Text className="text-red-500">Not Synced</Text>
-                      )}
                     </View>
                   </View>
+                  <Text style={styles.recentInspectionDate}>
+                    Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
+                  </Text>
                 </TouchableOpacity>
               ))}
-
-              {recentInspections.length === 0 && (
-                <View className="items-center justify-center py-8">
-                  <Text className="text-gray-500">No recent inspections</Text>
-                </View>
-              )}
-            </ScrollView>
+            </View>
           )}
-        </View>
+
+          {/* Admin Dashboard Button (if admin) */}
+          {(userRole === 'admin' || userRole === 'system_admin') && (
+            <TouchableOpacity
+              style={styles.adminButton}
+              onPress={() => setCurrentView('admin')}
+            >
+              <Text style={styles.adminButtonText}>Admin Dashboard</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Logout Button */}
+          <TouchableOpacity
+            style={styles.logoutButton}
+            onPress={handleLogout}
+          >
+            <Text style={styles.logoutButtonText}>Logout</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );
 }
 
-export default function HomeScreen() {
-  return (
-    <PropertyProvider>
-      <HomeScreenContent />
-    </PropertyProvider>
-  );
-}
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#111827',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#9ca3af',
+    marginTop: 16,
+    fontSize: 16,
+  },
+  container: {
+    flex: 1,
+    backgroundColor: '#111827',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  header: {
+    marginBottom: 24,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#f3f4f6',
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: '#9ca3af',
+  },
+  roleText: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginTop: 4,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  topButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 8,
+  },
+  topButton: {
+    flex: 1,
+    backgroundColor: '#3b82f6',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    minHeight: 60,
+    justifyContent: 'center',
+  },
+  topButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  primaryButton: {
+    backgroundColor: '#3b82f6',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    backgroundColor: '#1f2937',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  secondaryButtonText: {
+    color: '#f3f4f6',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  adminButton: {
+    backgroundColor: '#7c3aed',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#8b5cf6',
+  },
+  adminButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  logoutButton: {
+    backgroundColor: '#991b1b',
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 24,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  recentSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#f3f4f6',
+    marginBottom: 12,
+  },
+  recentInspectionCard: {
+    backgroundColor: '#1f2937',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  recentInspectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  recentInspectionAddress: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#f3f4f6',
+    flex: 1,
+    marginRight: 8,
+  },
+  recentInspectionDate: {
+    fontSize: 14,
+    color: '#9ca3af',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  statusComplete: {
+    backgroundColor: '#064e3b',
+    borderColor: '#047857',
+  },
+  statusIncomplete: {
+    backgroundColor: '#78350f',
+    borderColor: '#d97706',
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusCompleteText: {
+    color: '#6ee7b7',
+  },
+  statusIncompleteText: {
+    color: '#fbbf24',
+  },
+});

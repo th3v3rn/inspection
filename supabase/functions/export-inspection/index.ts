@@ -7,29 +7,17 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+    return new Response('ok', { 
+      headers: corsHeaders,
+      status: 200 
+    });
   }
 
   try {
-    console.log('=== Export function started ===');
+    const { inspectionId, format = 'json', email } = await req.json();
     
-    // Parse request body
-    let body;
-    try {
-      body = await req.json();
-      console.log('Request body:', body);
-    } catch (e) {
-      console.error('Failed to parse request body:', e);
-      return new Response(
-        JSON.stringify({ success: false, error: 'Invalid JSON in request body' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
-      );
-    }
-
-    const { inspectionId, format = 'json' } = body;
-
     if (!inspectionId) {
       return new Response(
         JSON.stringify({ success: false, error: 'Inspection ID is required' }),
@@ -37,7 +25,16 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase - try multiple possible env var names
+    if (!email) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Email address is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      );
+    }
+
+    console.log(`Exporting inspection ${inspectionId} in ${format} format to ${email}`);
+
+    // Initialize Supabase
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || 
                         Deno.env.get("SUPABASE_SERVICE_KEY") ||
@@ -87,6 +84,24 @@ serve(async (req) => {
       .select('*')
       .eq('inspection_id', inspectionId);
 
+    // Fetch inspector details
+    console.log('Fetching inspector details...');
+    const { data: inspector } = await supabase
+      .from('users')
+      .select('email, full_name')
+      .eq('id', inspection.inspector_id)
+      .single();
+
+    // Extract latitude and longitude from property_api_data
+    let latitude = null;
+    let longitude = null;
+    
+    if (inspection.property_api_data) {
+      const propertyData = inspection.property_api_data;
+      latitude = propertyData.latitude || propertyData.lat || null;
+      longitude = propertyData.longitude || propertyData.lng || propertyData.lon || null;
+    }
+
     // Build export data
     const exportData = {
       inspection: {
@@ -96,10 +111,16 @@ serve(async (req) => {
         status: inspection.status,
         syncStatus: inspection.sync_status,
         inspectorId: inspection.inspector_id,
+        inspectorName: inspector?.full_name || inspector?.email || 'Unknown',
+        latitude: latitude,
+        longitude: longitude,
         createdAt: inspection.created_at,
         updatedAt: inspection.updated_at,
       },
       categories: inspection.categories,
+      propertyApiData: inspection.property_api_data || null,
+      propertyOutline: inspection.property_outline || null,
+      measurements: inspection.measurements || {},
       images: images?.map(img => ({
         id: img.id,
         category: img.category,
@@ -110,8 +131,37 @@ serve(async (req) => {
       metadata: {
         exportedAt: new Date().toISOString(),
         format: format,
+        recipientEmail: email,
       }
     };
+
+    console.log('Export data structure:', JSON.stringify(exportData, null, 2));
+
+    // Send to n8n webhook
+    const n8nWebhookUrl = Deno.env.get("N8N_WEBHOOK_URL");
+    
+    if (n8nWebhookUrl) {
+      console.log('Sending data to n8n webhook...');
+      try {
+        const webhookResponse = await fetch(n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(exportData),
+        });
+
+        if (!webhookResponse.ok) {
+          console.error('n8n webhook error:', await webhookResponse.text());
+        } else {
+          console.log('Successfully sent to n8n webhook');
+        }
+      } catch (webhookError) {
+        console.error('Failed to send to n8n webhook:', webhookError);
+      }
+    } else {
+      console.warn('N8N_WEBHOOK_URL not configured, skipping webhook');
+    }
 
     console.log('Export successful');
 
