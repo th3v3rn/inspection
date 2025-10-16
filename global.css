@@ -1,3 +1,56 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Dark greyscale theme */
+@layer base {
+  * {
+    @apply text-gray-100;
+  }
+  
+  body {
+    @apply bg-gray-900;
+  }
+}
+
+@layer components {
+  .bg-primary {
+    @apply bg-gray-800;
+  }
+  
+  .bg-secondary {
+    @apply bg-gray-700;
+  }
+  
+  .bg-surface {
+    @apply bg-gray-800;
+  }
+  
+  .text-primary {
+    @apply text-gray-100;
+  }
+  
+  .text-secondary {
+    @apply text-gray-300;
+  }
+  
+  .text-muted {
+    @apply text-gray-400;
+  }
+  
+  .border-default {
+    @apply border-gray-600;
+  }
+  
+  .btn-primary {
+    @apply bg-gray-700 text-gray-100 border-gray-600;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-600 text-gray-100 border-gray-500;
+  }
+  
+  .input-default {
+    @apply bg-gray-800 text-gray-100 border-gray-600 placeholder-gray-400;
+  }
+}

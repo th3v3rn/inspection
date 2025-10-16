@@ -68,3 +68,8 @@ export const useProperty = () => {
   
   return context;
 };
+
+// Default export to prevent Expo Router from treating this as a route
+export default function PropertyContextRoute() {
+  return null;
+}

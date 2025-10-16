@@ -8,6 +8,9 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
 } from "react-native";
 import {
   Mic,
@@ -17,7 +20,6 @@ import {
   Save,
   X,
   Map,
-  ArrowLeft,
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import CategoryInspection from "./CategoryInspection";
@@ -33,123 +35,268 @@ type Category =
   | "Property ID"
   | "Exterior"
   | "Interior"
-  | "HVAC"
-  | "Plumbing"
-  | "Electrical"
-  | "Hazards"
+  | "Systems and Utilities"
+  | "Attached Structures"
+  | "Roof"
+  | "Foundation"
+  | "Finish Up"
   | "Other";
 
 interface InspectionFormProps {
-  onSave?: (data: any) => void;
+  currentUser: any;
+  onComplete?: () => void;
   onCancel?: () => void;
   initialData?: any;
-  assignedAddresses?: string[];
-  isOfflineMode?: boolean;
+  inspectionId?: string;
+  onSave?: () => void;
 }
 
-const InspectionForm = ({
-  onSave = () => {},
-  onCancel = () => {},
+export default function InspectionForm({ 
+  currentUser, 
+  inspectionId: inspectionIdProp, 
   initialData = null,
-  assignedAddresses = [
-    "123 Main St, Anytown, USA",
-    "456 Oak Ave, Springfield, USA",
-    "789 Pine Rd, Lakeside, USA",
-  ],
-  isOfflineMode = false,
-}: InspectionFormProps) => {
+  onCancel, 
+  onComplete, 
+  onSave 
+}: InspectionFormProps) {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const inspectionId = (params.id || params.inspectionId) as string;
+  const paramsInspectionId = params.id as string;
   
-  const { createInspection, getInspectionById } = useInspections();
-  const { setPropertyData } = useProperty();
-  const [isLoading, setIsLoading] = useState(inspectionId ? true : false);
-  const [step, setStep] = useState<number>(inspectionId ? 2 : 1); // Start at category selection if editing
+  // Use prop inspectionId if provided, otherwise use params
+  const initialInspectionId = inspectionIdProp || paramsInspectionId;
+  
+  // Get property context at component level (not inside handler)
+  // Wrap in try-catch to handle cases where provider isn't available yet
+  let propertyContext;
+  try {
+    propertyContext = useProperty();
+  } catch (error) {
+    console.warn('PropertyContext not available, using defaults');
+    propertyContext = {
+      propertyData: null,
+      setPropertyData: () => {},
+      clearPropertyData: () => {},
+      isPropertyDataAvailable: false,
+    };
+  }
+  const { propertyData, setPropertyData } = propertyContext;
+  
+  // Add safety check for currentUser
+  const { createInspection, updateInspection } = useInspections(
+    currentUser?.id || '',
+    currentUser?.role || 'inspector'
+  );
+  const [isLoading, setIsLoading] = useState(initialInspectionId ? true : false);
+  const [saving, setSaving] = useState(false);
+  
+  // Helper function to get inspection by ID
+  const getInspectionById = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('id', id)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching inspection:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in getInspectionById:', error);
+      return null;
+    }
+  };
+  
+  // Helper function to migrate old category names to new ones
+  const migrateCategoryData = (oldCategories: any) => {
+    const newCategories: any = {
+      property_id: {},
+      foundation: {},
+      exterior: {},
+      attached_structure: {},
+      roof: {},
+      interior: {},
+      systems_and_utilities: {},
+      finish_up: {},
+    };
+    
+    // Map old category names to new ones
+    const categoryMapping: { [key: string]: string } = {
+      'hvac': 'attached_structure',
+      'hazards': 'finish_up',
+      'other': 'finish_up',
+      'plumbing': 'roof',
+      'electrical': 'interior', // Migrate old electrical data to interior
+      // Keep existing categories that haven't changed
+      'property_id': 'property_id',
+      'foundation': 'foundation',
+      'exterior': 'exterior',
+      'interior': 'interior',
+      'systems_and_utilities': 'systems_and_utilities',
+      'roof': 'roof',
+    };
+    
+    // Migrate data from old categories to new ones
+    if (oldCategories && typeof oldCategories === 'object') {
+      Object.keys(oldCategories).forEach(oldKey => {
+        const newKey = categoryMapping[oldKey] || oldKey;
+        if (oldCategories[oldKey] && typeof oldCategories[oldKey] === 'object') {
+          newCategories[newKey] = oldCategories[oldKey];
+        }
+      });
+    }
+    
+    return newCategories;
+  };
+  
+  const [step, setStep] = useState<number>(initialInspectionId ? 2 : 1);
   const [addressMethod, setAddressMethod] = useState<AddressMethod>("google");
   const [address, setAddress] = useState<string>(initialData?.address || "");
   const [addressSuggestions, setAddressSuggestions] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(
-    null,
-  );
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isSearching, setIsSearching] = useState<boolean>(false);
-  const [showPropertyOutlineTool, setShowPropertyOutlineTool] =
-    useState<boolean>(false);
+  const [showPropertyOutlineTool, setShowPropertyOutlineTool] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [assignedAddresses, setAssignedAddresses] = useState<string[]>([]);
   const [formData, setFormData] = useState<any>(
     initialData || {
       address: "",
       categories: {
-        "Property ID": {},
-        Foundation: {},
-        Exterior: {},
-        HVAC: {},
-        Plumbing: {},
-        Electrical: {},
-        Hazards: {},
+        property_id: {},
+        foundation: {},
+        exterior: {},
+        interior: {},
+        systems_and_utilities: {},
+        attached_structure: {},
+        roof: {},
+        finish_up: {},
       },
       propertyOutline: null,
       measurements: {},
     },
   );
-  
+  const [date, setDate] = useState<string>(new Date().toISOString());
+  const [currentInspectionId, setCurrentInspectionId] = useState<string>(initialInspectionId);
+  const [isInspectionComplete, setIsInspectionComplete] = useState<boolean>(false);
+
   // Add a ref to track if inspection has been loaded
   const inspectionLoaded = useRef(false);
 
-  // Load inspection data if ID is provided
+  // Show loading if currentUser is not available yet
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#111827" />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#9ca3af" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Load assigned addresses for inspectors
   useEffect(() => {
-    const loadInspection = async () => {
-      if (inspectionId && !inspectionLoaded.current) {
-        try {
-          setIsLoading(true);
-          console.log("Loading inspection with ID:", inspectionId);
-          
-          const inspection = await getInspectionById(inspectionId);
-          if (inspection) {
-            console.log("Loaded inspection:", inspection);
-            inspectionLoaded.current = true;
-            
-            // Convert database categories format to app format
-            const appCategories = {
-              "Property ID": inspection.categories?.property_id ? { completed: true } : {},
-              Foundation: inspection.categories?.foundation || inspection.categories?.exterior ? { completed: true } : {},
-              Exterior: inspection.categories?.exterior || inspection.categories?.interior ? { completed: true } : {},
-              HVAC: inspection.categories?.hvac ? { completed: true } : {},
-              Plumbing: inspection.categories?.plumbing ? { completed: true } : {},
-              Electrical: inspection.categories?.electrical ? { completed: true } : {},
-              Hazards: inspection.categories?.hazards ? { completed: true } : {},
-            };
-            
-            // Set form data with loaded inspection
-            setFormData({
-              id: inspection.id,
-              address: inspection.address || "",
-              categories: appCategories,
-              propertyOutline: inspection.property_outline || null,
-              measurements: inspection.measurements || {},
-              status: inspection.status || "incomplete",
-              sync_status: inspection.sync_status || "synced",
-              date: inspection.date || new Date().toISOString(),
-            });
-            
-            setAddress(inspection.address || "");
-            setStep(2); // Go directly to category selection
-          } else {
-            // Handle case where inspection is not found
-            Alert.alert("Error", "Inspection not found");
-            router.replace("/");
-          }
-        } catch (error) {
-          console.error("Error loading inspection:", error);
-          Alert.alert("Error", "Failed to load inspection details");
-        } finally {
-          setIsLoading(false);
+    const loadAssignedAddresses = async () => {
+      if (currentUser?.role === 'inspector') {
+        const { data: assignments } = await supabase
+          .from('assignments')
+          .select('properties(address)')
+          .eq('inspector_id', currentUser.id);
+        
+        if (assignments) {
+          const addresses = assignments
+            .map(a => a.properties?.address)
+            .filter(Boolean);
+          setAssignedAddresses(addresses);
         }
       }
     };
-    
-    loadInspection();
-  }, [inspectionId]);
+    loadAssignedAddresses();
+  }, [currentUser]);
+
+  // Load existing inspection if inspectionId is provided
+  useEffect(() => {
+    if (initialInspectionId) {
+      loadInspection(initialInspectionId);
+    }
+  }, [initialInspectionId]);
+
+  const loadInspection = async (id: string) => {
+    try {
+      console.log('=== Loading inspection ===');
+      console.log('Inspection ID:', id);
+      
+      setIsLoading(true);
+      
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
+      }
+
+      if (!data) {
+        console.error('No inspection data returned');
+        throw new Error('Inspection not found');
+      }
+
+      console.log('Loaded inspection:', data);
+      console.log('Inspection categories (raw):', data.categories);
+
+      // Set the property data from the inspection if available
+      if (data.property_api_data) {
+        console.log('✅ Setting property data from inspection:', data.property_api_data);
+        setPropertyData({
+          propertyAddress: data.address,
+          fullAddress: data.address,
+          propertyData: data.property_api_data,
+        });
+      } else {
+        console.log('⚠️ No property_api_data found in inspection');
+      }
+
+      // Migrate old category names to new ones
+      const migratedCategories = migrateCategoryData(data.categories);
+      console.log("Migrated categories:", JSON.stringify(migratedCategories, null, 2));
+      
+      // Set form data with loaded inspection - use migrated categories
+      setFormData({
+        id: data.id,
+        address: data.address || "",
+        categories: migratedCategories,
+        propertyOutline: data.property_outline || null,
+        measurements: data.measurements || {},
+        status: data.status || "incomplete",
+        sync_status: data.sync_status || "synced",
+        date: data.date || new Date().toISOString(),
+        inspection_complete: data.inspection_complete || false,
+      });
+      
+      setAddress(data.address || "");
+      setIsInspectionComplete(data.inspection_complete || false);
+      setStep(2); // Go directly to category selection
+      
+      console.log('✅ Inspection loaded successfully');
+    } catch (error) {
+      console.error("❌ Error loading inspection:", error);
+      Alert.alert("Error", "Failed to load inspection details. Please try again.");
+      if (onCancel) {
+        onCancel();
+      }
+    } finally {
+      setIsLoading(false);
+      console.log('=== Load inspection complete ===');
+    }
+  };
 
   // Update address state when initialData changes
   useEffect(() => {
@@ -161,12 +308,101 @@ const InspectionForm = ({
   const categories = [
     "Property ID",
     "Foundation",
+    "Roof",
     "Exterior",
-    "HVAC",
-    "Plumbing",
-    "Electrical",
-    "Hazards",
+    "Attached Structures",
+    "Interior",
+    "Systems and Utilities",
+    "Finish Up",
   ];
+
+  // Helper function to get or create property ID
+  const getPropertyId = async () => {
+    // If we already have a property_id in formData, use it
+    if (formData.property_id) {
+      return formData.property_id;
+    }
+
+    // If we have an inspection ID, get the property_id from it
+    if (initialInspectionId) {
+      const inspection = await getInspectionById(initialInspectionId);
+      if (inspection?.property_id) {
+        // Update formData with the property_id
+        setFormData((prev) => ({
+          ...prev,
+          property_id: inspection.property_id,
+        }));
+        return inspection.property_id;
+      }
+    }
+
+    // Check if a property exists for this address
+    const { data: existingProperty } = await supabase
+      .from('properties')
+      .select('id, admin_id')
+      .eq('address', formData.address)
+      .maybeSingle();
+
+    if (existingProperty) {
+      // Update formData with the property_id
+      setFormData((prev) => ({
+        ...prev,
+        property_id: existingProperty.id,
+      }));
+      return existingProperty.id;
+    }
+
+    // Get admin_id - if inspector, find their admin, otherwise use current user
+    let adminId = null;
+    if (currentUser?.role === 'admin' || currentUser?.role === 'system_admin') {
+      adminId = currentUser.id;
+    } else if (currentUser?.role === 'inspector') {
+      // Find the admin this inspector is assigned to
+      const { data: assignment } = await supabase
+        .from('assignments')
+        .select('admin_id')
+        .eq('inspector_id', currentUser.id)
+        .limit(1)
+        .maybeSingle();
+      
+      if (assignment) {
+        adminId = assignment.admin_id;
+      }
+    }
+
+    // Create a new property if none exists
+    const { data: newProperty, error } = await supabase
+      .from('properties')
+      .insert({
+        address: formData.address,
+        admin_id: adminId,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error('Error creating property:', error);
+      return null;
+    }
+
+    // Update formData with the new property_id
+    setFormData((prev) => ({
+      ...prev,
+      property_id: newProperty.id,
+    }));
+
+    return newProperty.id;
+  };
+
+  // Get or create property ID when PropertyOutlineTool is shown
+  useEffect(() => {
+    const initPropertyId = async () => {
+      if (showPropertyOutlineTool && !formData.property_id) {
+        await getPropertyId();
+      }
+    };
+    initPropertyId();
+  }, [showPropertyOutlineTool]);
 
   // Function to fetch property data from Smarty API
   const fetchPropertyData = async (selectedAddress: string) => {
@@ -193,13 +429,17 @@ const InspectionForm = ({
         // Store in PropertyContext
         setPropertyData(propertyContextData);
         
-        // Also store in formData for direct access
+        // CRITICAL: Store in formData with the correct structure for PropertyIDForm
         setFormData((prev) => ({
           ...prev,
-          propertyApiData: result.data,
+          address: selectedAddress,
+          propertyApiData: {
+            fullAddress: selectedAddress,
+            propertyData: result.data,
+          },
         }));
         
-        console.log("✅ PropertyContext updated");
+        console.log("✅ PropertyContext and formData updated");
       } else {
         console.warn("❌ Failed to fetch property data:", result.error);
       }
@@ -225,14 +465,6 @@ const InspectionForm = ({
 
   // Function to search addresses using Google Places API through our proxy
   const searchAddress = async (query: string) => {
-    if (isOfflineMode) {
-      Alert.alert(
-        "Offline Mode",
-        "Address search is not available in offline mode"
-      );
-      return;
-    }
-
     if (query.length < 3) {
       setAddressSuggestions([]);
       return;
@@ -272,7 +504,7 @@ const InspectionForm = ({
     }
   };
 
-  const selectAddress = (selectedAddress: string) => {
+  const selectAddress = async (selectedAddress: string) => {
     setAddress(selectedAddress);
     setAddressSuggestions([]);
     setFormData((prev) => ({ ...prev, address: selectedAddress }));
@@ -281,7 +513,58 @@ const InspectionForm = ({
     console.log("Selected address:", selectedAddress);
     
     // Fetch property data from Smarty API immediately
-    fetchPropertyData(selectedAddress);
+    await fetchPropertyData(selectedAddress);
+    
+    // CRITICAL FIX: Create inspection in database immediately so images can reference it
+    if (!currentInspectionId) {
+      try {
+        console.log("Creating inspection in database...");
+        const inspectionData = {
+          address: selectedAddress,
+          date: new Date().toISOString(),
+          status: 'incomplete',
+          categories: {},
+          sync_status: 'not-synced',
+          inspector_id: currentUser.id,
+          admin_id: currentUser.role === 'admin' ? currentUser.id : currentUser.admin_id,
+          property_api_data: null,
+          inspection_complete: false,
+        };
+
+        const { data, error } = await supabase
+          .from('inspections')
+          .insert([inspectionData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating inspection:', error);
+          throw error;
+        }
+
+        console.log('✅ Inspection created in database with ID:', data.id);
+        console.log('Full inspection data:', data);
+        setCurrentInspectionId(data.id);
+        
+        // Verify the inspection was created
+        const { data: verifyData, error: verifyError } = await supabase
+          .from('inspections')
+          .select('id')
+          .eq('id', data.id)
+          .single();
+        
+        if (verifyError) {
+          console.error('❌ Failed to verify inspection creation:', verifyError);
+        } else {
+          console.log('✅ Verified inspection exists in database:', verifyData.id);
+        }
+      } catch (error) {
+        console.error('Failed to create inspection:', error);
+        Alert.alert('Error', 'Failed to create inspection. Please try again.');
+      }
+    } else {
+      console.log('Inspection already exists with ID:', currentInspectionId);
+    }
   };
 
   const handleCategorySelect = (category: Category) => {
@@ -289,17 +572,33 @@ const InspectionForm = ({
     setStep(3);
   };
 
-  const handleCategoryComplete = (categoryData: any) => {
+  const handleCategoryComplete = async (categoryData: any) => {
+    // Convert category name to database format (lowercase with underscores)
+    const categoryKey = categoryData.category.toLowerCase().replace(/ /g, '_');
+    
+    console.log("=== InspectionForm handleCategoryComplete ===");
+    console.log("Category data received:", JSON.stringify(categoryData, null, 2));
+    console.log("Category key:", categoryKey);
+    console.log("Current formData.categories:", JSON.stringify(formData.categories, null, 2));
+    
     setFormData((prev) => ({
       ...prev,
       categories: {
         ...prev.categories,
-        [categoryData.category]: categoryData,
+        [categoryKey]: categoryData,
       },
     }));
-
-    // Don't automatically navigate away - let user use Next/Previous buttons
-    // Only show property outline tool if explicitly requested
+    
+    console.log("Updated formData.categories:", JSON.stringify({
+      ...formData.categories,
+      [categoryKey]: categoryData,
+    }, null, 2));
+    
+    // Only go back to category selection if the category is marked as completed
+    if (categoryData.completed) {
+      setSelectedCategory(null);
+      setStep(2);
+    }
   };
 
   const handleNextCategory = () => {
@@ -339,126 +638,116 @@ const InspectionForm = ({
 
   const handleSaveInspection = async () => {
     try {
-      setIsSaving(true);
-      console.log("Starting save process...");
-      
-      // Calculate completion status
-      const completedCategories = Object.values(formData.categories).filter(
-        (category) => category && Object.keys(category).length > 0
-      ).length;
-      const totalCategories = categories.length;
-      const status = completedCategories === totalCategories ? 'complete' : 'incomplete';
+      setSaving(true);
+      console.log('Saving inspection...');
+      console.log('Property data:', propertyData);
+      console.log('Categories:', formData.categories);
+      console.log('Inspection Complete:', isInspectionComplete);
 
-      // Prepare inspection data for database
       const inspectionData = {
-        address: formData.address,
+        address: propertyData?.propertyAddress || address,
+        date: date,
+        status: 'incomplete',
         categories: formData.categories,
-        property_outline: formData.propertyOutline,
-        measurements: formData.measurements,
-        status,
-        sync_status: 'synced',
-        date: new Date().toISOString(),
+        sync_status: 'not-synced',
+        inspector_id: currentUser.id, // Changed from user_id to inspector_id
+        admin_id: currentUser.role === 'admin' ? currentUser.id : currentUser.admin_id,
+        property_api_data: propertyData?.propertyData || null,
+        inspection_complete: isInspectionComplete,
       };
 
-      console.log("Saving inspection with data:", inspectionData);
-      
-      const savedInspection = await createInspection(inspectionData);
-      console.log("Save result:", savedInspection);
-      
-      if (savedInspection) {
-        console.log("Save successful, inspection data:", savedInspection);
-        Alert.alert(
-          "Success", 
-          "Inspection saved successfully",
-          [
-            {
-              text: "OK",
-              onPress: () => {
-                console.log("Navigating to home page...");
-                onSave(formData);
-                // Use replace instead of push to avoid stacking navigation
-                router.replace("/");
-              }
-            }
-          ]
-        );
-        
-        // Reset form
-        setStep(1);
-        setAddress("");
-        setSelectedCategory(null);
-        setFormData({
-          address: "",
-          categories: {
-            "Property ID": {},
-            Foundation: {},
-            Exterior: {},
-            HVAC: {},
-            Plumbing: {},
-            Electrical: {},
-            Hazards: {},
-          },
-          propertyOutline: null,
-          measurements: {},
-        });
+      console.log('Inspection data to save:', inspectionData);
+
+      if (currentInspectionId) {
+        // Update existing inspection
+        const { error } = await supabase
+          .from('inspections')
+          .update(inspectionData)
+          .eq('id', currentInspectionId);
+
+        if (error) throw error;
+        console.log('✅ Inspection updated successfully');
       } else {
-        Alert.alert("Error", "Failed to save inspection. Please try again.");
+        // Create new inspection
+        const { data, error } = await supabase
+          .from('inspections')
+          .insert([inspectionData])
+          .select()
+          .single();
+
+        if (error) throw error;
+        console.log('✅ Inspection created successfully:', data);
+        
+        // Update the inspectionId state so subsequent saves are updates
+        setCurrentInspectionId(data.id);
+      }
+
+      Alert.alert('Success', 'Inspection saved successfully');
+      
+      // Navigate back to dashboard
+      if (onSave) {
+        onSave();
+      } else if (onComplete) {
+        onComplete();
+      } else {
+        // Fallback: navigate to home
+        router.replace('/');
       }
     } catch (error) {
       console.error('Error saving inspection:', error);
-      Alert.alert("Error", "Failed to save inspection. Please try again.");
+      Alert.alert('Error', 'Failed to save inspection');
     } finally {
-      setIsSaving(false);
+      setSaving(false);
+    }
+  };
+
+  const handleBackToDashboard = () => {
+    if (onCancel) {
+      onCancel();
     }
   };
 
   const renderAddressEntry = () => {
     return (
-      <View className="bg-white p-4 rounded-lg shadow-sm">
-        <Text className="text-xl font-bold mb-4">Property Address</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Property Address</Text>
 
-        <View className="flex-row mb-6 border-b border-gray-200 pb-4">
+        <View style={styles.methodSelector}>
           <TouchableOpacity
-            className={`flex-1 items-center py-2 ${addressMethod === "google" ? "bg-blue-100 rounded-lg" : ""}`}
+            style={[styles.methodButton, addressMethod === "google" && styles.methodButtonActive]}
             onPress={() => setAddressMethod("google")}
           >
             <Search
               size={20}
-              color={addressMethod === "google" ? "#3b82f6" : "#6b7280"}
+              color={addressMethod === "google" ? "#9ca3af" : "#6b7280"}
             />
-            <Text
-              className={`mt-1 ${addressMethod === "google" ? "text-blue-600" : "text-gray-600"}`}
-            >
+            <Text style={[styles.methodButtonText, addressMethod === "google" && styles.methodButtonTextActive]}>
               Search
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-1 items-center py-2 ${addressMethod === "manual" ? "bg-blue-100 rounded-lg" : ""}`}
+            style={[styles.methodButton, addressMethod === "manual" && styles.methodButtonActive]}
             onPress={() => setAddressMethod("manual")}
           >
             <MapPin
               size={20}
-              color={addressMethod === "manual" ? "#3b82f6" : "#6b7280"}
+              color={addressMethod === "manual" ? "#9ca3af" : "#6b7280"}
             />
-            <Text
-              className={`mt-1 ${addressMethod === "manual" ? "text-blue-600" : "text-gray-600"}`}
-            >
+            <Text style={[styles.methodButtonText, addressMethod === "manual" && styles.methodButtonTextActive]}>
               Manual
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            className={`flex-1 items-center py-2 ${addressMethod === "assigned" ? "bg-blue-100 rounded-lg" : ""}`}
+            style={[styles.methodButton, addressMethod === "assigned" && styles.methodButtonActive]}
             onPress={() => setAddressMethod("assigned")}
           >
             <ChevronRight
               size={20}
-              color={addressMethod === "assigned" ? "#3b82f6" : "#6b7280"}
+              color={addressMethod === "assigned" ? "#9ca3af" : "#6b7280"}
             />
-            <Text
-              className={`mt-1 ${addressMethod === "assigned" ? "text-blue-600" : "text-gray-600"}`}
-            >
+            <Text style={[styles.methodButtonText, addressMethod === "assigned" && styles.methodButtonTextActive]}>
               Assigned
             </Text>
           </TouchableOpacity>
@@ -466,10 +755,12 @@ const InspectionForm = ({
 
         {addressMethod === "google" && (
           <View>
-            <View className="relative mb-4">
+            <View style={styles.searchInputContainer}>
+              <Search size={20} color="#6b7280" style={styles.searchIcon} />
               <TextInput
-                className="border border-gray-300 rounded-lg p-3 pl-10"
+                style={styles.searchInput}
                 placeholder="Start typing an address..."
+                placeholderTextColor="#9ca3af"
                 value={address}
                 onChangeText={(text) => {
                   setAddress(text);
@@ -480,30 +771,24 @@ const InspectionForm = ({
                   }
                 }}
               />
-              <Search
-                size={20}
-                color="#6b7280"
-                className="absolute left-3 top-3"
-                style={{ position: "absolute", left: 10, top: 12 }}
-              />
               {isSearching && (
                 <ActivityIndicator
                   size="small"
-                  color="#3b82f6"
-                  style={{ position: "absolute", right: 10, top: 12 }}
+                  color="#9ca3af"
+                  style={styles.searchSpinner}
                 />
               )}
             </View>
 
             {addressSuggestions.length > 0 && (
-              <View className="border border-gray-200 rounded-lg mb-4">
+              <View style={styles.suggestionsContainer}>
                 {addressSuggestions.map((suggestion, index) => (
                   <TouchableOpacity
                     key={index}
-                    className={`p-3 ${index < addressSuggestions.length - 1 ? "border-b border-gray-200" : ""}`}
+                    style={[styles.suggestionItem, index < addressSuggestions.length - 1 && styles.suggestionItemBorder]}
                     onPress={() => selectAddress(suggestion)}
                   >
-                    <Text>{suggestion}</Text>
+                    <Text style={styles.suggestionText}>{suggestion}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -512,10 +797,11 @@ const InspectionForm = ({
         )}
 
         {addressMethod === "manual" && (
-          <View className="mb-4">
+          <View style={styles.manualInputContainer}>
             <TextInput
-              className="border border-gray-300 rounded-lg p-3 mb-2"
+              style={styles.input}
               placeholder="Full address"
+              placeholderTextColor="#9ca3af"
               value={address}
               onChangeText={(text) => {
                 setAddress(text);
@@ -526,28 +812,36 @@ const InspectionForm = ({
         )}
 
         {addressMethod === "assigned" && (
-          <View className="border border-gray-200 rounded-lg mb-4">
+          <View style={styles.suggestionsContainer}>
             {assignedAddresses.map((assignedAddress, index) => (
               <TouchableOpacity
                 key={index}
-                className={`p-3 ${index < assignedAddresses.length - 1 ? "border-b border-gray-200" : ""}`}
+                style={[styles.suggestionItem, index < assignedAddresses.length - 1 && styles.suggestionItemBorder]}
                 onPress={() => selectAddress(assignedAddress)}
               >
-                <Text>{assignedAddress}</Text>
+                <Text style={styles.suggestionText}>{assignedAddress}</Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
         <TouchableOpacity
-          className={`bg-blue-500 py-3 px-4 rounded-lg items-center ${!address ? "opacity-50" : ""}`}
+          style={[styles.primaryButton, !address && styles.buttonDisabled]}
           disabled={!address}
           onPress={() => {
             setFormData((prev) => ({ ...prev, address }));
             setStep(2);
           }}
         >
-          <Text className="text-white font-semibold">Continue</Text>
+          <Text style={styles.primaryButtonText}>Continue</Text>
+        </TouchableOpacity>
+
+        {/* Back to Dashboard Button */}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleBackToDashboard}
+        >
+          <Text style={styles.backButtonText}>Back to Dashboard</Text>
         </TouchableOpacity>
       </View>
     );
@@ -555,46 +849,57 @@ const InspectionForm = ({
 
   const renderCategorySelection = () => {
     return (
-      <View className="bg-white p-4 rounded-lg shadow-sm">
-        <View className="flex-row justify-between items-center mb-4">
-          <Text className="text-xl font-bold">Inspection Categories</Text>
+      <View style={styles.card}>
+        <View style={styles.categoryHeader}>
+          <Text style={styles.cardTitle}>Inspection Categories</Text>
           <TouchableOpacity 
             onPress={handleSaveInspection}
             disabled={isSaving}
+            style={styles.saveButton}
           >
             {isSaving ? (
-              <ActivityIndicator size="small" color="#3b82f6" />
+              <ActivityIndicator size="small" color="#9ca3af" />
             ) : (
-              <Save size={20} color="#3b82f6" />
+              <Save size={20} color="#9ca3af" />
             )}
           </TouchableOpacity>
         </View>
 
-        <Text className="text-gray-600 mb-4">Property: {formData.address}</Text>
+        {/* Inspection Complete Toggle */}
+        <View style={styles.completeToggleContainer}>
+          <Text style={styles.completeToggleText}>Inspection Complete?</Text>
+          <TouchableOpacity
+            onPress={() => setIsInspectionComplete(!isInspectionComplete)}
+            style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
+          >
+            <View style={[styles.toggleThumb, isInspectionComplete && styles.toggleThumbActive]} />
+          </TouchableOpacity>
+        </View>
 
-        <ScrollView className="mb-4">
+        <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
+
+        <ScrollView style={styles.categoriesScroll}>
           {categories.map((category, index) => {
-            const isCompleted =
-              formData.categories[category] && Object.keys(formData.categories[category]).length > 0;
+            const categoryKey = category.toLowerCase().replace(/ /g, '_');
+            const isCompleted = formData.categories?.[categoryKey] && 
+                               Object.keys(formData.categories[categoryKey]).length > 0;
 
             return (
               <TouchableOpacity
                 key={index}
-                className={`flex-row justify-between items-center p-4 mb-2 rounded-lg border ${isCompleted ? "border-green-500 bg-green-50" : "border-gray-300"}`}
+                style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
                 onPress={() => handleCategorySelect(category)}
               >
-                <Text
-                  className={`font-medium ${isCompleted ? "text-green-700" : "text-gray-800"}`}
-                >
+                <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
                   {category}
                 </Text>
-                <View className="flex-row items-center">
+                <View style={styles.categoryItemRight}>
                   {isCompleted && (
-                    <Text className="text-green-600 mr-2">Completed</Text>
+                    <Text style={styles.completedBadge}>Completed</Text>
                   )}
                   <ChevronRight
                     size={16}
-                    color={isCompleted ? "#10b981" : "#6b7280"}
+                    color={isCompleted ? "#10b981" : "#9ca3af"}
                   />
                 </View>
               </TouchableOpacity>
@@ -604,115 +909,381 @@ const InspectionForm = ({
 
         {/* Property Outline Tool Button */}
         <TouchableOpacity
-          className="bg-blue-100 py-3 px-4 rounded-lg items-center mb-4 flex-row justify-center"
+          style={styles.secondaryButton}
           onPress={() => setShowPropertyOutlineTool(true)}
         >
-          <Map size={20} color="#3b82f6" />
-          <Text className="text-blue-700 font-semibold ml-2">
-            Property Outline Tool
-          </Text>
+          <Map size={20} color="#9ca3af" />
+          <Text style={styles.secondaryButtonText}>Property Outline Tool</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          className="bg-gray-200 py-3 px-4 rounded-lg items-center mt-2"
-          onPress={() => setStep(1)}
+          style={styles.backButton}
+          onPress={handleBackToDashboard}
         >
-          <Text className="text-gray-800 font-semibold">Back to Address</Text>
+          <Text style={styles.backButtonText}>Back to Dashboard</Text>
         </TouchableOpacity>
       </View>
     );
   };
 
   return (
-    <View className="flex-1 bg-gray-100 p-4">
-      {/* Back button header */}
-      <View className="flex-row items-center mb-4">
-        <TouchableOpacity 
-          onPress={handleBackButton}
-          className="p-2 rounded-full bg-white shadow-sm"
-        >
-          <ArrowLeft size={24} color="#3b82f6" />
-        </TouchableOpacity>
-        <Text className="text-lg font-semibold ml-2 text-gray-800">
-          {inspectionId ? "Edit Inspection" :
-           step === 1 ? "New Inspection" : 
-           step === 2 ? "Select Category" : 
-           selectedCategory ? `${selectedCategory} Inspection` : "Inspection"}
-        </Text>
-      </View>
-
-      {isLoading ? (
-        <View className="flex-1 justify-center items-center">
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text className="mt-4 text-gray-600">Loading inspection...</Text>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>
+            {initialInspectionId ? "Edit Inspection" :
+             step === 1 ? "New Inspection" : 
+             step === 2 ? "Select Category" : 
+             selectedCategory ? `${selectedCategory} Inspection` : "Inspection"}
+          </Text>
         </View>
-      ) : (
-        <>
-          {step === 1 && renderAddressEntry()}
 
-          {step === 2 && !showPropertyOutlineTool && renderCategorySelection()}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#9ca3af" />
+            <Text style={styles.loadingText}>Loading inspection...</Text>
+          </View>
+        ) : (
+          <>
+            {step === 1 && renderAddressEntry()}
 
-          {step === 3 && selectedCategory && (
-            <>
-              {selectedCategory === "Property ID" ? (
-                <PropertyIDForm
-                  key={formData.address || "property-id-form"}
-                  onComplete={handleCategoryComplete}
-                  onCancel={handleCancelCategory}
-                  onNext={handleNextCategory}
-                  onPrevious={handlePreviousCategory}
-                  isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                  isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                  initialData={{ 
-                    address: formData.address,
-                    propertyApiData: formData.propertyApiData,
-                  }}
-                />
-              ) : (
-                <CategoryInspection
-                  category={selectedCategory}
-                  initialData={formData.categories[selectedCategory]}
-                  onComplete={handleCategoryComplete}
-                  onCancel={() => {
-                    setSelectedCategory(null);
-                    setStep(2);
-                  }}
-                  onNext={() => {
-                    const currentIndex = categories.indexOf(selectedCategory);
-                    if (currentIndex < categories.length - 1) {
-                      const nextCategory = categories[currentIndex + 1];
-                      setSelectedCategory(nextCategory);
-                    }
-                  }}
-                  onPrevious={() => {
-                    const currentIndex = categories.indexOf(selectedCategory);
-                    if (currentIndex > 0) {
-                      const prevCategory = categories[currentIndex - 1];
-                      setSelectedCategory(prevCategory);
-                    }
-                  }}
-                  isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                  isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                  address={formData.address}
-                />
-              )}
-            </>
-          )}
+            {step === 2 && !showPropertyOutlineTool && renderCategorySelection()}
 
-          {showPropertyOutlineTool && (
-            <PropertyOutlineTool
-              address={formData.address}
-              onComplete={handlePropertyOutlineComplete}
-              onCancel={() => {
-                setShowPropertyOutlineTool(false);
-                setStep(2);
-              }}
-            />
-          )}
-        </>
-      )}
-    </View>
+            {step === 3 && selectedCategory && (
+              <>
+                {selectedCategory === "Property ID" ? (
+                  <PropertyIDForm
+                    key={formData.address || "property-id-form"}
+                    onComplete={handleCategoryComplete}
+                    onCancel={() => {
+                      setSelectedCategory(null);
+                      setStep(2);
+                    }}
+                    onNext={handleNextCategory}
+                    onPrevious={handlePreviousCategory}
+                    isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                    isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                    initialData={{ 
+                      address: formData.address,
+                      propertyApiData: formData.propertyApiData,
+                      ...formData.categories?.property_id,
+                    }}
+                  />
+                ) : (
+                  <CategoryInspection
+                    category={selectedCategory}
+                    inspectionId={currentInspectionId}
+                    initialData={(() => {
+                      const categoryKey = selectedCategory.toLowerCase().replace(/ /g, '_');
+                      const data = formData.categories?.[categoryKey] || {};
+                      return data;
+                    })()}
+                    onComplete={handleCategoryComplete}
+                    onCancel={() => {
+                      setSelectedCategory(null);
+                      setStep(2);
+                    }}
+                    onNext={() => {
+                      const currentIndex = categories.indexOf(selectedCategory);
+                      if (currentIndex < categories.length - 1) {
+                        const nextCategory = categories[currentIndex + 1];
+                        setSelectedCategory(nextCategory);
+                      }
+                    }}
+                    onPrevious={() => {
+                      const currentIndex = categories.indexOf(selectedCategory);
+                      if (currentIndex > 0) {
+                        const prevCategory = categories[currentIndex - 1];
+                        setSelectedCategory(prevCategory);
+                      }
+                    }}
+                    isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                    isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                    address={formData.address}
+                  />
+                )}
+              </>
+            )}
+
+            {showPropertyOutlineTool && (
+              <PropertyOutlineTool
+                address={formData.address}
+                propertyId={formData.property_id}
+                onSave={async (structures, exportImage) => {
+                  const propId = await getPropertyId();
+                  if (!propId) {
+                    Alert.alert("Error", "Failed to create property. Please try again.");
+                    return;
+                  }
+                  
+                  if (!formData.property_id) {
+                    setFormData((prev) => ({
+                      ...prev,
+                      property_id: propId,
+                    }));
+                  }
+                  
+                  setShowPropertyOutlineTool(false);
+                  setStep(2);
+                }}
+                onCancel={() => {
+                  setShowPropertyOutlineTool(false);
+                  setStep(2);
+                }}
+              />
+            )}
+          </>
+        )}
+      </View>
+    </SafeAreaView>
   );
-};
+}
 
-export default InspectionForm;
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#111827',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#9ca3af',
+    marginTop: 16,
+    fontSize: 16,
+  },
+  header: {
+    marginBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#f3f4f6',
+  },
+  card: {
+    backgroundColor: '#1f2937',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 16,
+    color: '#f3f4f6',
+  },
+  methodSelector: {
+    flexDirection: 'row',
+    marginBottom: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    paddingBottom: 16,
+  },
+  methodButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  methodButtonActive: {
+    backgroundColor: '#374151',
+    borderRadius: 8,
+  },
+  methodButtonText: {
+    marginTop: 4,
+    color: '#6b7280',
+  },
+  methodButtonTextActive: {
+    color: '#9ca3af',
+  },
+  searchInputContainer: {
+    position: 'relative',
+    marginBottom: 16,
+  },
+  searchInput: {
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    borderRadius: 8,
+    padding: 12,
+    paddingLeft: 40,
+    color: '#f3f4f6',
+    fontSize: 16,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: 12,
+    top: 12,
+    zIndex: 1,
+  },
+  searchSpinner: {
+    position: 'absolute',
+    right: 12,
+    top: 12,
+  },
+  suggestionsContainer: {
+    borderWidth: 1,
+    borderColor: '#374151',
+    borderRadius: 8,
+    marginBottom: 16,
+    backgroundColor: '#374151',
+  },
+  suggestionItem: {
+    padding: 12,
+  },
+  suggestionItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#4b5563',
+  },
+  suggestionText: {
+    color: '#f3f4f6',
+  },
+  manualInputContainer: {
+    marginBottom: 16,
+  },
+  input: {
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    color: '#f3f4f6',
+    fontSize: 16,
+  },
+  primaryButton: {
+    backgroundColor: '#374151',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  primaryButtonText: {
+    color: '#f3f4f6',
+    fontWeight: '600',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  saveButton: {
+    marginLeft: 12,
+  },
+  completeToggleContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    padding: 12,
+    backgroundColor: '#374151',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  completeToggleText: {
+    color: '#f3f4f6',
+    fontWeight: '500',
+  },
+  toggleSwitch: {
+    width: 56,
+    height: 32,
+    borderRadius: 16,
+    padding: 4,
+    backgroundColor: '#4b5563',
+  },
+  toggleSwitchActive: {
+    backgroundColor: '#10b981',
+  },
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#ffffff',
+  },
+  toggleThumbActive: {
+    marginLeft: 'auto',
+  },
+  propertyAddress: {
+    color: '#9ca3af',
+    marginBottom: 16,
+  },
+  categoriesScroll: {
+    marginBottom: 16,
+  },
+  categoryItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    backgroundColor: '#374151',
+  },
+  categoryItemCompleted: {
+    borderColor: '#10b981',
+  },
+  categoryItemText: {
+    fontWeight: '500',
+    color: '#f3f4f6',
+  },
+  categoryItemTextCompleted: {
+    color: '#6ee7b7',
+  },
+  categoryItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  completedBadge: {
+    color: '#6ee7b7',
+    marginRight: 8,
+  },
+  secondaryButton: {
+    backgroundColor: '#374151',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  secondaryButtonText: {
+    color: '#9ca3af',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  backButton: {
+    backgroundColor: '#4b5563',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#6b7280',
+  },
+  backButtonText: {
+    color: '#f3f4f6',
+    fontWeight: '600',
+  },
+});
