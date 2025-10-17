@@ -12,18 +12,20 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
-import { Wifi, WifiOff, Plus, List, RefreshCw } from "lucide-react-native";
+import { Wifi, WifiOff, Plus, List, RefreshCw, Settings as SettingsIcon } from "lucide-react-native";
 import { Image } from "expo-image";
 import { useInspections } from "../hooks/useInspections";
 import InspectionForm from "./components/InspectionForm";
 import LoginScreen from "./components/LoginScreen";
 import AdminDashboard from "./components/AdminDashboard";
+import Settings from "./components/Settings";
 import { PropertyProvider, useProperty } from "./contexts/PropertyContext";
 import { supabase } from "../lib/supabase";
 import { Database } from "../src/types/supabase";
 import { lookupPropertyBySmarty } from "../lib/smartyPropertyService";
 import AssignedPropertiesList from './components/AssignedPropertiesList';
 import SavedInspectionsList from './components/SavedInspectionsList';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type User = Database['public']['Tables']['users']['Row'];
 
@@ -31,11 +33,27 @@ export default function Index() {
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'inspection' | 'saved' | 'admin' | 'assigned'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'inspection' | 'saved' | 'admin' | 'assigned' | 'settings'>('dashboard');
   const [selectedInspection, setSelectedInspection] = useState<any>(null);
   const [recentInspections, setRecentInspections] = useState<any[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [userFullName, setUserFullName] = useState<string | null>(null);
 
   useEffect(() => {
+    // Load theme preference
+    const loadTheme = async () => {
+      try {
+        const theme = await AsyncStorage.getItem('theme');
+        if (theme) {
+          setIsDarkMode(theme === 'dark');
+        }
+      } catch (error) {
+        console.error('Error loading theme:', error);
+      }
+    };
+    
+    loadTheme();
+    
     console.log('=== Starting auth check ===');
     
     // Set a timeout to prevent infinite loading
@@ -65,7 +83,7 @@ export default function Index() {
         if (session?.user) {
           const { data: userData, error: userError } = await supabase
             .from('users')
-            .select('role')
+            .select('role, full_name')
             .eq('id', session.user.id)
             .single();
           
@@ -74,6 +92,7 @@ export default function Index() {
           } else {
             console.log('User role:', userData?.role);
             setUserRole(userData?.role || null);
+            setUserFullName(userData?.full_name || null);
           }
           
           loadRecentInspections(session.user.id);
@@ -105,7 +124,7 @@ export default function Index() {
         console.log('Loading user role for ID:', session.user.id);
         const { data: userData, error: userError } = await supabase
           .from('users')
-          .select('role')
+          .select('role, full_name')
           .eq('id', session.user.id)
           .single();
         
@@ -115,6 +134,7 @@ export default function Index() {
         } else {
           console.log('✅ Loaded user role:', userData?.role);
           setUserRole(userData?.role || null);
+          setUserFullName(userData?.full_name || null);
         }
         
         console.log('Loading recent inspections...');
@@ -150,7 +170,7 @@ export default function Index() {
       console.log('✅ Inspections query result:', data?.length || 0, 'inspections found');
       setRecentInspections(data || []);
     } catch (error) {
-      console.error('❌ Exception loading recent inspections:', error);
+      console.error('�� Exception loading recent inspections:', error);
     }
   };
 
@@ -159,10 +179,19 @@ export default function Index() {
       await supabase.auth.signOut();
       setUser(null);
       setUserRole(null);
+      setUserFullName(null);
       setCurrentView('dashboard');
     } catch (error) {
       console.error('Error logging out:', error);
     }
+  };
+
+  const getWelcomeMessage = () => {
+    if (userFullName) {
+      const firstName = userFullName.trim().split(' ')[0];
+      return `Welcome, ${firstName}`;
+    }
+    return `Welcome, ${user?.email}`;
   };
 
   if (checkingAuth) {
@@ -185,6 +214,8 @@ export default function Index() {
         currentUser={user}
         onBack={() => setCurrentView('dashboard')}
         onNavigateToPropertyLookup={() => setCurrentView('inspection')}
+        isDarkMode={isDarkMode}
+        onToggleTheme={setIsDarkMode}
       />
     );
   }
@@ -233,14 +264,17 @@ export default function Index() {
           initialData={selectedInspection}
           onCancel={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
           onComplete={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
           onSave={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
         />
@@ -248,18 +282,35 @@ export default function Index() {
     );
   }
 
+  // Show Settings
+  if (currentView === 'settings') {
+    return (
+      <Settings
+        currentUser={user}
+        onClose={() => setCurrentView('dashboard')}
+        isDarkMode={isDarkMode}
+        onToggleTheme={setIsDarkMode}
+      />
+    );
+  }
+
   // Default dashboard view
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Pulse Inspections</Text>
-          <Text style={styles.headerSubtitle}>Welcome, {user?.email}</Text>
-          {userRole && (
-            <Text style={styles.roleText}>Role: {userRole}</Text>
-          )}
+          <View>
+            <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Pulse Inspections</Text>
+            <Text style={[styles.headerSubtitle, !isDarkMode && styles.headerSubtitleLight]}>{getWelcomeMessage()}</Text>
+            {userRole && (
+              <Text style={[styles.roleText, !isDarkMode && styles.roleTextLight]}>Role: {userRole}</Text>
+            )}
+          </View>
+          <TouchableOpacity onPress={() => setCurrentView('settings')} style={styles.settingsButton}>
+            <SettingsIcon size={24} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+          </TouchableOpacity>
         </View>
 
         {/* Main Content */}
@@ -267,7 +318,7 @@ export default function Index() {
           {/* Top 3 Buttons */}
           <View style={styles.topButtonsContainer}>
             <TouchableOpacity
-              style={styles.topButton}
+              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
               onPress={() => {
                 setSelectedInspection(null);
                 setCurrentView('inspection');
@@ -277,14 +328,14 @@ export default function Index() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.topButton}
+              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
               onPress={() => setCurrentView('assigned')}
             >
               <Text style={styles.topButtonText}>Assigned Inspections</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.topButton}
+              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
               onPress={() => setCurrentView('saved')}
             >
               <Text style={styles.topButtonText}>Saved Inspections</Text>
@@ -294,18 +345,26 @@ export default function Index() {
           {/* Recent Inspections Section */}
           {recentInspections.length > 0 && (
             <View style={styles.recentSection}>
-              <Text style={styles.sectionTitle}>Recent Inspections</Text>
+              <View style={styles.recentSectionHeader}>
+                <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Recent Inspections</Text>
+                <TouchableOpacity 
+                  onPress={() => loadRecentInspections(user.id)}
+                  style={styles.refreshButton}
+                >
+                  <RefreshCw size={20} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
               {recentInspections.map((inspection) => (
                 <TouchableOpacity
                   key={inspection.id}
-                  style={styles.recentInspectionCard}
+                  style={[styles.recentInspectionCard, !isDarkMode && styles.recentInspectionCardLight]}
                   onPress={() => {
                     setSelectedInspection(inspection);
                     setCurrentView('inspection');
                   }}
                 >
                   <View style={styles.recentInspectionHeader}>
-                    <Text style={styles.recentInspectionAddress} numberOfLines={1}>
+                    <Text style={[styles.recentInspectionAddress, !isDarkMode && styles.recentInspectionAddressLight]} numberOfLines={1}>
                       {inspection.address}
                     </Text>
                     <View style={[
@@ -320,7 +379,7 @@ export default function Index() {
                       </Text>
                     </View>
                   </View>
-                  <Text style={styles.recentInspectionDate}>
+                  <Text style={[styles.recentInspectionDate, !isDarkMode && styles.recentInspectionDateLight]}>
                     Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
                   </Text>
                 </TouchableOpacity>
@@ -331,7 +390,7 @@ export default function Index() {
           {/* Admin Dashboard Button (if admin) */}
           {(userRole === 'admin' || userRole === 'system_admin') && (
             <TouchableOpacity
-              style={styles.adminButton}
+              style={[styles.adminButton, !isDarkMode && styles.adminButtonLight]}
               onPress={() => setCurrentView('admin')}
             >
               <Text style={styles.adminButtonText}>Admin Dashboard</Text>
@@ -340,7 +399,7 @@ export default function Index() {
 
           {/* Logout Button */}
           <TouchableOpacity
-            style={styles.logoutButton}
+            style={[styles.logoutButton, !isDarkMode && styles.logoutButtonLight]}
             onPress={handleLogout}
           >
             <Text style={styles.logoutButtonText}>Logout</Text>
@@ -366,7 +425,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,
@@ -374,6 +435,9 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   headerTitle: {
     fontSize: 28,
@@ -381,14 +445,26 @@ const styles = StyleSheet.create({
     color: '#f3f4f6',
     marginBottom: 8,
   },
+  headerTitleLight: {
+    color: '#111827',
+  },
   headerSubtitle: {
     fontSize: 16,
     color: '#9ca3af',
+  },
+  headerSubtitleLight: {
+    color: '#6b7280',
   },
   roleText: {
     fontSize: 14,
     color: '#6b7280',
     marginTop: 4,
+  },
+  roleTextLight: {
+    color: '#9ca3af',
+  },
+  settingsButton: {
+    padding: 8,
   },
   scrollView: {
     flex: 1,
@@ -408,37 +484,14 @@ const styles = StyleSheet.create({
     minHeight: 60,
     justifyContent: 'center',
   },
+  topButtonLight: {
+    backgroundColor: '#3b82f6',
+  },
   topButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-  },
-  primaryButton: {
-    backgroundColor: '#3b82f6',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: '#1f2937',
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#374151',
-  },
-  secondaryButtonText: {
-    color: '#f3f4f6',
-    fontSize: 16,
-    fontWeight: '600',
   },
   adminButton: {
     backgroundColor: '#7c3aed',
@@ -447,6 +500,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     alignItems: 'center',
     borderWidth: 1,
+    borderColor: '#8b5cf6',
+  },
+  adminButtonLight: {
+    backgroundColor: '#7c3aed',
     borderColor: '#8b5cf6',
   },
   adminButtonText: {
@@ -461,6 +518,9 @@ const styles = StyleSheet.create({
     marginTop: 24,
     alignItems: 'center',
   },
+  logoutButtonLight: {
+    backgroundColor: '#dc2626',
+  },
   logoutButtonText: {
     color: '#ffffff',
     fontSize: 16,
@@ -473,7 +533,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#f3f4f6',
+  },
+  sectionTitleLight: {
+    color: '#111827',
+  },
+  recentSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
+  },
+  refreshButton: {
+    padding: 8,
   },
   recentInspectionCard: {
     backgroundColor: '#1f2937',
@@ -482,6 +553,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#374151',
+  },
+  recentInspectionCardLight: {
+    backgroundColor: '#f9fafb',
+    borderColor: '#e5e7eb',
   },
   recentInspectionHeader: {
     flexDirection: 'row',
@@ -496,9 +571,15 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
+  recentInspectionAddressLight: {
+    color: '#111827',
+  },
   recentInspectionDate: {
     fontSize: 14,
     color: '#9ca3af',
+  },
+  recentInspectionDateLight: {
+    color: '#6b7280',
   },
   statusBadge: {
     paddingHorizontal: 8,

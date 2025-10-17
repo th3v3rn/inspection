@@ -722,7 +722,7 @@ const PropertyIDForm = ({
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={handleBackToCategories}
+              onPress={handleComplete}
               style={styles.completeButton}
             >
               <Text style={styles.completeButtonText}>
@@ -757,7 +757,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   header: {
     backgroundColor: '#1f2937',

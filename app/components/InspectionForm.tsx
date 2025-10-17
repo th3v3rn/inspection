@@ -555,9 +555,9 @@ export default function InspectionForm({
     if (categoryKey === 'property_id' && categoryData.property_id) {
       console.log("Setting property_id in formData:", categoryData.property_id);
       
-      // Store in ref for immediate access
+      // Store in ref for immediate access - THIS IS CRITICAL
       propertyIdRef.current = categoryData.property_id;
-      console.log("✅ propertyIdRef.current set to:", propertyIdRef.current);
+      console.log("��� propertyIdRef.current set to:", propertyIdRef.current);
       
       // Update formData with property_id - this will trigger re-render
       setFormData((prev) => ({
@@ -903,7 +903,11 @@ export default function InspectionForm({
 
         <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
 
-        <ScrollView style={styles.categoriesScroll}>
+        <ScrollView 
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesScrollContent}
+          showsVerticalScrollIndicator={true}
+        >
           {categories.map((category, index) => {
             const categoryKey = category.toLowerCase().replace(/ /g, '_');
             const isCompleted = formData.categories?.[categoryKey] && 
@@ -978,7 +982,8 @@ export default function InspectionForm({
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#111827" />
       {showPropertyOutlineTool ? (
         <PropertyOutlineTool
           address={formData.address}
@@ -1012,7 +1017,11 @@ export default function InspectionForm({
 
           {/* Category Selection List */}
           {step === 2 && !selectedCategory && (
-            <View style={styles.categorySelection}>
+            <ScrollView 
+              style={styles.categorySelection}
+              contentContainerStyle={styles.categorySelectionContent}
+              showsVerticalScrollIndicator={true}
+            >
               <View style={styles.categoryHeader}>
                 <Text style={styles.sectionTitle}>Select Category</Text>
                 <TouchableOpacity 
@@ -1041,52 +1050,50 @@ export default function InspectionForm({
 
               <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
 
-              <ScrollView style={styles.categoriesScroll}>
-                {categories.map((category, index) => {
-                  const categoryKey = category.toLowerCase().replace(/ /g, '_');
-                  const isCompleted = formData.categories?.[categoryKey] && 
-                                     Object.keys(formData.categories[categoryKey]).length > 0;
-                  const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
+              {categories.map((category, index) => {
+                const categoryKey = category.toLowerCase().replace(/ /g, '_');
+                const isCompleted = formData.categories?.[categoryKey] && 
+                                   Object.keys(formData.categories[categoryKey]).length > 0;
+                const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
 
-                  return (
-                    <TouchableOpacity
-                      key={index}
-                      style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
-                      onPress={() => handleCategorySelect(category)}
-                    >
-                      <View style={styles.categoryItemContent}>
-                        <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
-                          {category}
-                        </Text>
-                        <View style={styles.categoryItemRight}>
-                          {isCompleted && (
-                            <Text style={styles.completedBadge}>Completed</Text>
-                          )}
-                          <ChevronRight
-                            size={16}
-                            color={isCompleted ? "#10b981" : "#9ca3af"}
-                          />
-                        </View>
-                      </View>
-                      
-                      {/* Visual Fill Indicator */}
-                      <View style={styles.progressBarContainer}>
-                        <View 
-                          style={[
-                            styles.progressBarFill, 
-                            { 
-                              width: `${completionPercentage}%`,
-                              backgroundColor: completionPercentage === 100 ? '#10b981' : 
-                                              completionPercentage > 50 ? '#3b82f6' : 
-                                              completionPercentage > 0 ? '#f59e0b' : '#4b5563'
-                            }
-                          ]} 
+                return (
+                  <TouchableOpacity
+                    key={index}
+                    style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
+                    onPress={() => handleCategorySelect(category)}
+                  >
+                    <View style={styles.categoryItemContent}>
+                      <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
+                        {category}
+                      </Text>
+                      <View style={styles.categoryItemRight}>
+                        {isCompleted && (
+                          <Text style={styles.completedBadge}>Completed</Text>
+                        )}
+                        <ChevronRight
+                          size={16}
+                          color={isCompleted ? "#10b981" : "#9ca3af"}
                         />
                       </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+                    </View>
+                    
+                    {/* Visual Fill Indicator */}
+                    <View style={styles.progressBarContainer}>
+                      <View 
+                        style={[
+                          styles.progressBarFill, 
+                          { 
+                            width: `${completionPercentage}%`,
+                            backgroundColor: completionPercentage === 100 ? '#10b981' : 
+                                            completionPercentage > 50 ? '#3b82f6' : 
+                                            completionPercentage > 0 ? '#f59e0b' : '#4b5563'
+                          }
+                        ]} 
+                      />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
 
               <TouchableOpacity
                 style={styles.secondaryButton}
@@ -1110,7 +1117,7 @@ export default function InspectionForm({
               >
                 <Text style={styles.backButtonText}>Back to Dashboard</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           )}
 
           {/* Category Forms */}
@@ -1169,7 +1176,7 @@ export default function InspectionForm({
           )}
         </>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -1177,7 +1184,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   content: {
     flex: 1,
@@ -1359,7 +1365,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoriesScroll: {
+    maxHeight: 400,
     marginBottom: 16,
+  },
+  categoriesScrollContent: {
+    paddingBottom: 8,
   },
   categoryItem: {
     flexDirection: 'column',
@@ -1438,11 +1448,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   categorySelection: {
+    flex: 1,
     padding: 16,
     backgroundColor: '#1f2937',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#374151',
+  },
+  categorySelectionContent: {
+    paddingBottom: 24,
   },
   sectionTitle: {
     fontSize: 20,
