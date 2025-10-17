@@ -433,20 +433,22 @@ const PropertyOutlineTool = ({
   };
 
   const handleSave = async () => {
-    console.log('handleSave called');
-    console.log('propertyId:', propertyId);
-    console.log('structures:', structures);
+    console.log("=== PropertyOutlineTool handleSave ===");
+    console.log("propertyId prop:", propertyId);
+    console.log("structures:", structures);
     
     if (!propertyId) {
-      console.log('No propertyId provided');
+      console.log("❌ No propertyId provided");
       Alert.alert(
-        "Complete Property ID First", 
-        "Please complete and save the Property ID section before using the Property Outline Tool. This will create the property record needed to save outlines.",
+        "Complete Property ID First",
+        "Please complete and save the Property ID section before using the Property Outline Tool.",
         [{ text: "OK" }]
       );
       return;
     }
 
+    console.log("✅ propertyId is available:", propertyId);
+    
     if (structures.length === 0) {
       console.log('No structures to save');
       Alert.alert("Error", "No structures to save. Please draw at least one outline.");

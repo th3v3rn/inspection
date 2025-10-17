@@ -264,14 +264,17 @@ export default function Index() {
           initialData={selectedInspection}
           onCancel={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
           onComplete={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
           onSave={() => {
             setSelectedInspection(null);
+            loadRecentInspections(user.id);
             setCurrentView('dashboard');
           }}
         />
@@ -342,7 +345,15 @@ export default function Index() {
           {/* Recent Inspections Section */}
           {recentInspections.length > 0 && (
             <View style={styles.recentSection}>
-              <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Recent Inspections</Text>
+              <View style={styles.recentSectionHeader}>
+                <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Recent Inspections</Text>
+                <TouchableOpacity 
+                  onPress={() => loadRecentInspections(user.id)}
+                  style={styles.refreshButton}
+                >
+                  <RefreshCw size={20} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+                </TouchableOpacity>
+              </View>
               {recentInspections.map((inspection) => (
                 <TouchableOpacity
                   key={inspection.id}
@@ -414,7 +425,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   containerLight: {
     backgroundColor: '#ffffff',
@@ -523,10 +533,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#f3f4f6',
-    marginBottom: 12,
   },
   sectionTitleLight: {
     color: '#111827',
+  },
+  recentSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  refreshButton: {
+    padding: 8,
   },
   recentInspectionCard: {
     backgroundColor: '#1f2937',
