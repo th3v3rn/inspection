@@ -92,20 +92,36 @@ export default function Index() {
     checkUser();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('=== Auth State Change ===');
+      console.log('Event:', event);
+      console.log('Has session:', !!session);
+      console.log('User email:', session?.user?.email);
+      
       if (session?.user) {
         setUser(session.user);
         
         // Load user role
-        const { data: userData } = await supabase
+        console.log('Loading user role for ID:', session.user.id);
+        const { data: userData, error: userError } = await supabase
           .from('users')
           .select('role')
           .eq('id', session.user.id)
           .single();
         
-        setUserRole(userData?.role || null);
-        loadRecentInspections(session.user.id);
+        if (userError) {
+          console.error('❌ Error loading user role:', userError);
+          console.error('Error details:', JSON.stringify(userError, null, 2));
+        } else {
+          console.log('✅ Loaded user role:', userData?.role);
+          setUserRole(userData?.role || null);
+        }
+        
+        console.log('Loading recent inspections...');
+        await loadRecentInspections(session.user.id);
+        console.log('✅ Recent inspections loaded');
       } else {
+        console.log('No session - clearing user state');
         setUser(null);
         setUserRole(null);
         setRecentInspections([]);
@@ -117,17 +133,24 @@ export default function Index() {
 
   const loadRecentInspections = async (userId: string) => {
     try {
+      console.log('Querying inspections for user ID:', userId);
       const { data, error } = await supabase
         .from('inspections')
         .select('*')
-        .eq('user_id', userId)
+        .eq('inspector_id', userId)
         .order('updated_at', { ascending: false })
         .limit(5);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error loading recent inspections:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+      
+      console.log('✅ Inspections query result:', data?.length || 0, 'inspections found');
       setRecentInspections(data || []);
     } catch (error) {
-      console.error('Error loading recent inspections:', error);
+      console.error('❌ Exception loading recent inspections:', error);
     }
   };
 
@@ -152,7 +175,7 @@ export default function Index() {
   }
 
   if (!user) {
-    return <LoginScreen onLoginSuccess={() => setUser(user)} />;
+    return <LoginScreen />;
   }
 
   // Show Admin Dashboard

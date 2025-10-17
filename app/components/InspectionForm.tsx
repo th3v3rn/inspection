@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   StatusBar,
   StyleSheet,
+  Linking,
 } from "react-native";
 import {
   Mic,
@@ -20,6 +21,7 @@ import {
   Save,
   X,
   Map,
+  Navigation,
 } from "lucide-react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import CategoryInspection from "./CategoryInspection";
@@ -50,6 +52,33 @@ interface InspectionFormProps {
   inspectionId?: string;
   onSave?: () => void;
 }
+
+// Helper function to calculate completion percentage for a category
+const calculateCategoryCompletion = (categoryData: any): number => {
+  if (!categoryData || typeof categoryData !== 'object') {
+    return 0;
+  }
+  
+  const fields = Object.keys(categoryData).filter(key => 
+    key !== 'category' && 
+    key !== 'timestamp' && 
+    key !== 'completed'
+  );
+  
+  if (fields.length === 0) {
+    return 0;
+  }
+  
+  const filledFields = fields.filter(key => {
+    const value = categoryData[key];
+    if (typeof value === 'boolean') return true; // Checkboxes count as filled
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number') return true;
+    return false;
+  });
+  
+  return Math.round((filledFields.length / fields.length) * 100);
+};
 
 export default function InspectionForm({ 
   currentUser, 
@@ -185,6 +214,9 @@ export default function InspectionForm({
 
   // Add a ref to track if inspection has been loaded
   const inspectionLoaded = useRef(false);
+  
+  // Add a ref to track property_id
+  const propertyIdRef = useRef<string | null>(null);
 
   // Show loading if currentUser is not available yet
   if (!currentUser) {
@@ -316,93 +348,31 @@ export default function InspectionForm({
     "Finish Up",
   ];
 
-  // Helper function to get or create property ID
-  const getPropertyId = async () => {
-    // If we already have a property_id in formData, use it
-    if (formData.property_id) {
-      return formData.property_id;
+  // Initialize property ID when component mounts or when we need it
+  const initPropertyId = async () => {
+    if (propertyIdRef.current) {
+      console.log('Property ID already initialized:', propertyIdRef.current);
+      return;
     }
 
-    // If we have an inspection ID, get the property_id from it
-    if (initialInspectionId) {
-      const inspection = await getInspectionById(initialInspectionId);
-      if (inspection?.property_id) {
-        // Update formData with the property_id
-        setFormData((prev) => ({
-          ...prev,
-          property_id: inspection.property_id,
-        }));
-        return inspection.property_id;
-      }
-    }
-
-    // Check if a property exists for this address
-    const { data: existingProperty } = await supabase
-      .from('properties')
-      .select('id, admin_id')
-      .eq('address', formData.address)
-      .maybeSingle();
-
-    if (existingProperty) {
-      // Update formData with the property_id
-      setFormData((prev) => ({
-        ...prev,
-        property_id: existingProperty.id,
-      }));
-      return existingProperty.id;
-    }
-
-    // Get admin_id - if inspector, find their admin, otherwise use current user
-    let adminId = null;
-    if (currentUser?.role === 'admin' || currentUser?.role === 'system_admin') {
-      adminId = currentUser.id;
-    } else if (currentUser?.role === 'inspector') {
-      // Find the admin this inspector is assigned to
-      const { data: assignment } = await supabase
-        .from('assignments')
-        .select('admin_id')
-        .eq('inspector_id', currentUser.id)
-        .limit(1)
-        .maybeSingle();
-      
-      if (assignment) {
-        adminId = assignment.admin_id;
-      }
-    }
-
-    // Create a new property if none exists
-    const { data: newProperty, error } = await supabase
-      .from('properties')
-      .insert({
-        address: formData.address,
-        admin_id: adminId,
-      })
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('Error creating property:', error);
-      return null;
-    }
-
-    // Update formData with the new property_id
-    setFormData((prev) => ({
-      ...prev,
-      property_id: newProperty.id,
-    }));
-
-    return newProperty.id;
+    // Don't auto-create property - user must complete Property ID form first
+    console.log('Property ID not initialized - user must complete Property ID form');
   };
 
-  // Get or create property ID when PropertyOutlineTool is shown
-  useEffect(() => {
-    const initPropertyId = async () => {
-      if (showPropertyOutlineTool && !formData.property_id) {
-        await getPropertyId();
-      }
-    };
-    initPropertyId();
-  }, [showPropertyOutlineTool]);
+  // Get or create property ID
+  const getPropertyId = async (): Promise<string | null> => {
+    if (propertyIdRef.current) {
+      return propertyIdRef.current;
+    }
+
+    // Don't auto-create property - user must complete Property ID form first
+    Alert.alert(
+      "Complete Property ID First",
+      "Please complete and save the Property ID section before using features that require a property record.",
+      [{ text: "OK" }]
+    );
+    return null;
+  };
 
   // Function to fetch property data from Smarty API
   const fetchPropertyData = async (selectedAddress: string) => {
@@ -475,7 +445,7 @@ export default function InspectionForm({
     try {
       console.log('Searching for address:', query);
       
-      // Use the Supabase edge function proxy instead of direct API call
+      // Use the correct edge function slug
       const { data, error } = await supabase.functions.invoke('supabase-functions-google-places-proxy', {
         body: { query }
       });
@@ -515,10 +485,11 @@ export default function InspectionForm({
     // Fetch property data from Smarty API immediately
     await fetchPropertyData(selectedAddress);
     
-    // CRITICAL FIX: Create inspection in database immediately so images can reference it
+    // Create inspection in database immediately
     if (!currentInspectionId) {
       try {
         console.log("Creating inspection in database...");
+        
         const inspectionData = {
           address: selectedAddress,
           date: new Date().toISOString(),
@@ -543,7 +514,6 @@ export default function InspectionForm({
         }
 
         console.log('✅ Inspection created in database with ID:', data.id);
-        console.log('Full inspection data:', data);
         setCurrentInspectionId(data.id);
         
         // Verify the inspection was created
@@ -556,7 +526,7 @@ export default function InspectionForm({
         if (verifyError) {
           console.error('❌ Failed to verify inspection creation:', verifyError);
         } else {
-          console.log('✅ Verified inspection exists in database:', verifyData.id);
+          console.log('✅ Verified inspection exists in database:', verifyData);
         }
       } catch (error) {
         console.error('Failed to create inspection:', error);
@@ -569,7 +539,7 @@ export default function InspectionForm({
 
   const handleCategorySelect = (category: Category) => {
     setSelectedCategory(category);
-    setStep(3);
+    // Don't change step - keep it at 2 so forms render
   };
 
   const handleCategoryComplete = async (categoryData: any) => {
@@ -581,13 +551,50 @@ export default function InspectionForm({
     console.log("Category key:", categoryKey);
     console.log("Current formData.categories:", JSON.stringify(formData.categories, null, 2));
     
-    setFormData((prev) => ({
-      ...prev,
-      categories: {
-        ...prev.categories,
-        [categoryKey]: categoryData,
-      },
-    }));
+    // If this is the Property ID category, extract the property_id
+    if (categoryKey === 'property_id' && categoryData.property_id) {
+      console.log("Setting property_id in formData:", categoryData.property_id);
+      
+      // Store in ref for immediate access
+      propertyIdRef.current = categoryData.property_id;
+      console.log("✅ propertyIdRef.current set to:", propertyIdRef.current);
+      
+      // Update formData with property_id - this will trigger re-render
+      setFormData((prev) => ({
+        ...prev,
+        property_id: categoryData.property_id,
+        categories: {
+          ...prev.categories,
+          [categoryKey]: categoryData,
+        },
+      }));
+      
+      // Also update the inspection in the database with the property_id
+      if (currentInspectionId) {
+        try {
+          const { error } = await supabase
+            .from('inspections')
+            .update({ property_id: categoryData.property_id })
+            .eq('id', currentInspectionId);
+          
+          if (error) {
+            console.error('Error updating inspection with property_id:', error);
+          } else {
+            console.log('✅ Inspection updated with property_id:', categoryData.property_id);
+          }
+        } catch (error) {
+          console.error('Error updating inspection:', error);
+        }
+      }
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        categories: {
+          ...prev.categories,
+          [categoryKey]: categoryData,
+        },
+      }));
+    }
     
     console.log("Updated formData.categories:", JSON.stringify({
       ...formData.categories,
@@ -647,7 +654,7 @@ export default function InspectionForm({
       const inspectionData = {
         address: propertyData?.propertyAddress || address,
         date: date,
-        status: 'incomplete',
+        status: isInspectionComplete ? 'complete' : 'incomplete',
         categories: formData.categories,
         sync_status: 'not-synced',
         inspector_id: currentUser.id, // Changed from user_id to inspector_id
@@ -705,6 +712,24 @@ export default function InspectionForm({
     if (onCancel) {
       onCancel();
     }
+  };
+
+  const handleClose = () => {
+    if (onCancel) {
+      onCancel();
+    } else {
+      router.replace('/');
+    }
+  };
+
+  const handleGetDirections = () => {
+    const encodedAddress = encodeURIComponent(formData.address);
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
+    
+    Linking.openURL(url).catch((err) => {
+      console.error('Error opening maps:', err);
+      Alert.alert('Error', 'Could not open maps application');
+    });
   };
 
   const renderAddressEntry = () => {
@@ -883,6 +908,7 @@ export default function InspectionForm({
             const categoryKey = category.toLowerCase().replace(/ /g, '_');
             const isCompleted = formData.categories?.[categoryKey] && 
                                Object.keys(formData.categories[categoryKey]).length > 0;
+            const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
 
             return (
               <TouchableOpacity
@@ -890,16 +916,33 @@ export default function InspectionForm({
                 style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
                 onPress={() => handleCategorySelect(category)}
               >
-                <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
-                  {category}
-                </Text>
-                <View style={styles.categoryItemRight}>
-                  {isCompleted && (
-                    <Text style={styles.completedBadge}>Completed</Text>
-                  )}
-                  <ChevronRight
-                    size={16}
-                    color={isCompleted ? "#10b981" : "#9ca3af"}
+                <View style={styles.categoryItemContent}>
+                  <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
+                    {category}
+                  </Text>
+                  <View style={styles.categoryItemRight}>
+                    {isCompleted && (
+                      <Text style={styles.completedBadge}>Completed</Text>
+                    )}
+                    <ChevronRight
+                      size={16}
+                      color={isCompleted ? "#10b981" : "#9ca3af"}
+                    />
+                  </View>
+                </View>
+                
+                {/* Visual Fill Indicator */}
+                <View style={styles.progressBarContainer}>
+                  <View 
+                    style={[
+                      styles.progressBarFill, 
+                      { 
+                        width: `${completionPercentage}%`,
+                        backgroundColor: completionPercentage === 100 ? '#10b981' : 
+                                        completionPercentage > 50 ? '#3b82f6' : 
+                                        completionPercentage > 0 ? '#f59e0b' : '#4b5563'
+                      }
+                    ]} 
                   />
                 </View>
               </TouchableOpacity>
@@ -917,6 +960,14 @@ export default function InspectionForm({
         </TouchableOpacity>
 
         <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={handleGetDirections}
+        >
+          <Navigation size={20} color="#9ca3af" />
+          <Text style={styles.secondaryButtonText}>Get Directions</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
           style={styles.backButton}
           onPress={handleBackToDashboard}
         >
@@ -927,117 +978,198 @@ export default function InspectionForm({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {initialInspectionId ? "Edit Inspection" :
-             step === 1 ? "New Inspection" : 
-             step === 2 ? "Select Category" : 
-             selectedCategory ? `${selectedCategory} Inspection` : "Inspection"}
-          </Text>
-        </View>
+    <View style={styles.container}>
+      {showPropertyOutlineTool ? (
+        <PropertyOutlineTool
+          address={formData.address}
+          propertyId={formData.property_id || propertyIdRef.current}
+          onSave={async (structures, exportImage) => {
+            console.log("PropertyOutlineTool onSave called");
+            console.log("formData.property_id:", formData.property_id);
+            console.log("propertyIdRef.current:", propertyIdRef.current);
+            
+            const propId = formData.property_id || propertyIdRef.current;
+            if (!propId) {
+              Alert.alert(
+                "Complete Property ID First",
+                "Please complete and save the Property ID section before using the Property Outline Tool.",
+                [{ text: "OK" }]
+              );
+              return;
+            }
+            
+            setShowPropertyOutlineTool(false);
+            setStep(2);
+          }}
+          onCancel={() => {
+            setShowPropertyOutlineTool(false);
+            setStep(2);
+          }}
+        />
+      ) : (
+        <>
+          {step === 1 && renderAddressEntry()}
 
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#9ca3af" />
-            <Text style={styles.loadingText}>Loading inspection...</Text>
-          </View>
-        ) : (
-          <>
-            {step === 1 && renderAddressEntry()}
+          {/* Category Selection List */}
+          {step === 2 && !selectedCategory && (
+            <View style={styles.categorySelection}>
+              <View style={styles.categoryHeader}>
+                <Text style={styles.sectionTitle}>Select Category</Text>
+                <TouchableOpacity 
+                  onPress={handleSaveInspection}
+                  disabled={isSaving}
+                  style={styles.saveButton}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#9ca3af" />
+                  ) : (
+                    <Save size={20} color="#9ca3af" />
+                  )}
+                </TouchableOpacity>
+              </View>
 
-            {step === 2 && !showPropertyOutlineTool && renderCategorySelection()}
+              {/* Inspection Complete Toggle */}
+              <View style={styles.completeToggleContainer}>
+                <Text style={styles.completeToggleText}>Inspection Complete?</Text>
+                <TouchableOpacity
+                  onPress={() => setIsInspectionComplete(!isInspectionComplete)}
+                  style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
+                >
+                  <View style={[styles.toggleThumb, isInspectionComplete && styles.toggleThumbActive]} />
+                </TouchableOpacity>
+              </View>
 
-            {step === 3 && selectedCategory && (
-              <>
-                {selectedCategory === "Property ID" ? (
-                  <PropertyIDForm
-                    key={formData.address || "property-id-form"}
-                    onComplete={handleCategoryComplete}
-                    onCancel={() => {
-                      setSelectedCategory(null);
-                      setStep(2);
-                    }}
-                    onNext={handleNextCategory}
-                    onPrevious={handlePreviousCategory}
-                    isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                    isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                    initialData={{ 
-                      address: formData.address,
-                      propertyApiData: formData.propertyApiData,
-                      ...formData.categories?.property_id,
-                    }}
-                  />
-                ) : (
-                  <CategoryInspection
-                    category={selectedCategory}
-                    inspectionId={currentInspectionId}
-                    initialData={(() => {
-                      const categoryKey = selectedCategory.toLowerCase().replace(/ /g, '_');
-                      const data = formData.categories?.[categoryKey] || {};
-                      return data;
-                    })()}
-                    onComplete={handleCategoryComplete}
-                    onCancel={() => {
-                      setSelectedCategory(null);
-                      setStep(2);
-                    }}
-                    onNext={() => {
-                      const currentIndex = categories.indexOf(selectedCategory);
-                      if (currentIndex < categories.length - 1) {
-                        const nextCategory = categories[currentIndex + 1];
-                        setSelectedCategory(nextCategory);
-                      }
-                    }}
-                    onPrevious={() => {
-                      const currentIndex = categories.indexOf(selectedCategory);
-                      if (currentIndex > 0) {
-                        const prevCategory = categories[currentIndex - 1];
-                        setSelectedCategory(prevCategory);
-                      }
-                    }}
-                    isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                    isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                    address={formData.address}
-                  />
-                )}
-              </>
-            )}
+              <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
 
-            {showPropertyOutlineTool && (
-              <PropertyOutlineTool
-                address={formData.address}
-                propertyId={formData.property_id}
-                onSave={async (structures, exportImage) => {
-                  const propId = await getPropertyId();
-                  if (!propId) {
-                    Alert.alert("Error", "Failed to create property. Please try again.");
-                    return;
-                  }
-                  
-                  if (!formData.property_id) {
-                    setFormData((prev) => ({
-                      ...prev,
-                      property_id: propId,
-                    }));
-                  }
-                  
-                  setShowPropertyOutlineTool(false);
+              <ScrollView style={styles.categoriesScroll}>
+                {categories.map((category, index) => {
+                  const categoryKey = category.toLowerCase().replace(/ /g, '_');
+                  const isCompleted = formData.categories?.[categoryKey] && 
+                                     Object.keys(formData.categories[categoryKey]).length > 0;
+                  const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
+
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
+                      onPress={() => handleCategorySelect(category)}
+                    >
+                      <View style={styles.categoryItemContent}>
+                        <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
+                          {category}
+                        </Text>
+                        <View style={styles.categoryItemRight}>
+                          {isCompleted && (
+                            <Text style={styles.completedBadge}>Completed</Text>
+                          )}
+                          <ChevronRight
+                            size={16}
+                            color={isCompleted ? "#10b981" : "#9ca3af"}
+                          />
+                        </View>
+                      </View>
+                      
+                      {/* Visual Fill Indicator */}
+                      <View style={styles.progressBarContainer}>
+                        <View 
+                          style={[
+                            styles.progressBarFill, 
+                            { 
+                              width: `${completionPercentage}%`,
+                              backgroundColor: completionPercentage === 100 ? '#10b981' : 
+                                              completionPercentage > 50 ? '#3b82f6' : 
+                                              completionPercentage > 0 ? '#f59e0b' : '#4b5563'
+                            }
+                          ]} 
+                        />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={() => setShowPropertyOutlineTool(true)}
+              >
+                <Map size={20} color="#9ca3af" />
+                <Text style={styles.secondaryButtonText}>Property Outline Tool</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleGetDirections}
+              >
+                <Navigation size={20} color="#9ca3af" />
+                <Text style={styles.secondaryButtonText}>Get Directions</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={handleBackToDashboard}
+              >
+                <Text style={styles.backButtonText}>Back to Dashboard</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* Category Forms */}
+          {step === 2 && selectedCategory && (
+            selectedCategory === "Property ID" ? (
+              <PropertyIDForm
+                key={formData.address || "property-id-form"}
+                onComplete={handleCategoryComplete}
+                onCancel={() => {
+                  setSelectedCategory(null);
                   setStep(2);
                 }}
-                onCancel={() => {
-                  setShowPropertyOutlineTool(false);
-                  setStep(2);
+                onNext={handleNextCategory}
+                onPrevious={handlePreviousCategory}
+                isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                initialData={{ 
+                  address: formData.address,
+                  propertyApiData: formData.propertyApiData,
+                  ...formData.categories?.property_id,
                 }}
               />
-            )}
-          </>
-        )}
-      </View>
-    </SafeAreaView>
+            ) : (
+              <CategoryInspection
+                category={selectedCategory}
+                inspectionId={currentInspectionId}
+                initialData={(() => {
+                  const categoryKey = selectedCategory.toLowerCase().replace(/ /g, '_');
+                  const data = formData.categories?.[categoryKey] || {};
+                  return data;
+                })()}
+                onComplete={handleCategoryComplete}
+                onCancel={() => {
+                  setSelectedCategory(null);
+                  setStep(2);
+                }}
+                onNext={() => {
+                  const currentIndex = categories.indexOf(selectedCategory);
+                  if (currentIndex < categories.length - 1) {
+                    const nextCategory = categories[currentIndex + 1];
+                    setSelectedCategory(nextCategory);
+                  }
+                }}
+                onPrevious={() => {
+                  const currentIndex = categories.indexOf(selectedCategory);
+                  if (currentIndex > 0) {
+                    const prevCategory = categories[currentIndex - 1];
+                    setSelectedCategory(prevCategory);
+                  }
+                }}
+                isFirstCategory={categories.indexOf(selectedCategory) === 0}
+                isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+                address={formData.address}
+              />
+            )
+          )}
+        </>
+      )}
+    </View>
   );
 }
 
@@ -1068,6 +1200,9 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#f3f4f6',
+  },
+  closeButton: {
+    marginRight: 12,
   },
   card: {
     backgroundColor: '#1f2937',
@@ -1227,15 +1362,14 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoryItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     padding: 16,
     marginBottom: 8,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#4b5563',
     backgroundColor: '#374151',
+    overflow: 'hidden',
   },
   categoryItemCompleted: {
     borderColor: '#10b981',
@@ -1254,6 +1388,23 @@ const styles = StyleSheet.create({
   completedBadge: {
     color: '#6ee7b7',
     marginRight: 8,
+  },
+  categoryItemContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  progressBarContainer: {
+    height: 4,
+    backgroundColor: '#1f2937',
+    borderRadius: 2,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 2,
+    transition: 'width 0.3s ease',
   },
   secondaryButton: {
     backgroundColor: '#374151',
@@ -1285,5 +1436,18 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: '#f3f4f6',
     fontWeight: '600',
+  },
+  categorySelection: {
+    padding: 16,
+    backgroundColor: '#1f2937',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f3f4f6',
+    marginBottom: 16,
   },
 });

@@ -12,6 +12,7 @@ import {
   Platform,
   FlatList,
   PanResponder,
+  StyleSheet,
 } from "react-native";
 import { useProperty } from "../contexts/PropertyContext";
 import { supabase } from "@/lib/supabase";
@@ -323,7 +324,7 @@ const PropertyIDForm = ({
     }
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (!formData.address) {
       Alert.alert("Error", "Address is required");
       return;
@@ -332,12 +333,58 @@ const PropertyIDForm = ({
     console.log("=== PropertyIDForm handleComplete ===");
     console.log("Sending form data:", JSON.stringify(formData, null, 2));
     
-    onComplete({
-      category: "Property ID",
-      ...formData,
-      completed: true,
-      timestamp: new Date().toISOString(),
-    });
+    try {
+      // Create property record in database
+      console.log("Creating property record...");
+      
+      const propertyData = {
+        address: formData.address,
+        admin_id: currentUser?.role === 'admin' ? currentUser.id : currentUser?.admin_id,
+        property_data: {
+          acres: formData.acres,
+          parcel_account: formData.parcelAccount,
+          parcel_id: formData.parcelId,
+          number_of_stories: formData.numberOfStories,
+          floor_percentages: formData.floorPercentages,
+          sqft: formData.sqft,
+          year_built: formData.yearBuilt,
+          structure_type: formData.structureType,
+          site_access: formData.siteAccess,
+          structure_use: formData.structureUse,
+          overall_quality: formData.overallQuality,
+          detached_structures: formData.detachedStructures,
+          beds: formData.beds,
+          bathrooms: formData.bathrooms,
+          notes: formData.notes,
+        },
+      };
+      
+      const { data: property, error } = await supabase
+        .from('properties')
+        .insert([propertyData])
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("Error creating property:", error);
+        Alert.alert("Error", "Failed to create property record. Please try again.");
+        return;
+      }
+      
+      console.log("✅ Property created with ID:", property.id);
+      
+      // Pass the property_id back to the parent
+      onComplete({
+        category: "Property ID",
+        ...formData,
+        property_id: property.id,
+        completed: true,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error in handleComplete:", error);
+      Alert.alert("Error", "Failed to save property data. Please try again.");
+    }
   };
 
   const handlePrevious = () => {
@@ -375,32 +422,27 @@ const PropertyIDForm = ({
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-900" style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111827" />
       
       {/* Header with Back Button */}
-      <View className="bg-gray-800 p-4 border-b border-gray-700 flex-row items-center">
-        <TouchableOpacity onPress={onCancel} className="mr-3 p-2">
-          <Text className="text-gray-300 text-2xl">←</Text>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onCancel} style={styles.backButton}>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
-        <Text className="text-xl font-bold text-gray-100">Property Search</Text>
+        <Text style={styles.headerTitle}>Property Identification</Text>
       </View>
 
-      <ScrollView className="flex-1 bg-gray-900" {...panResponder.panHandlers}>
-        <View className="p-4">
-          <Text className="text-2xl font-bold text-gray-100 mb-6">
-            Property Identification
-          </Text>
-
-          {/* Property Information Form */}
-          <View className="bg-gray-800 p-4 rounded-lg border border-gray-600 mb-6">
-            <Text className="text-lg font-semibold mb-4 text-gray-100">Property Details</Text>
+      <ScrollView style={styles.scrollView} {...panResponder.panHandlers}>
+        <View style={styles.content}>
+          {/* Address Search Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Property Address</Text>
             
-            {/* Address Search with Google Places */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Address *</Text>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Address *</Text>
               <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
+                style={styles.input}
                 value={addressQuery}
                 onChangeText={handleAddressChange}
                 onFocus={handleAddressFocus}
@@ -410,16 +452,16 @@ const PropertyIDForm = ({
               
               {/* Address Suggestions */}
               {addressSuggestions.length > 0 && (
-                <View className="bg-gray-700 border border-gray-600 rounded-lg mt-2 max-h-48">
+                <View style={styles.suggestionsContainer}>
                   <FlatList
                     data={addressSuggestions}
                     keyExtractor={(item) => item.place_id}
                     renderItem={({ item }) => (
                       <TouchableOpacity
                         onPress={() => selectAddress(item)}
-                        className="p-3 border-b border-gray-600"
+                        style={styles.suggestionItem}
                       >
-                        <Text className="text-gray-100">{item.description}</Text>
+                        <Text style={styles.suggestionText}>{item.description}</Text>
                       </TouchableOpacity>
                     )}
                   />
@@ -427,72 +469,106 @@ const PropertyIDForm = ({
               )}
               
               {isSearching && (
-                <View className="mt-2">
+                <View style={styles.loadingContainer}>
                   <ActivityIndicator size="small" color="#9ca3af" />
                 </View>
               )}
             </View>
+          </View>
 
-            {/* Acres */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Acres</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.acres}
-                onChangeText={(text) => handleFieldChange("acres", text)}
-                placeholder="e.g., 0.5"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
+          {/* Property Details Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Property Details</Text>
+            
+            {/* Two Column Layout for Acres and Parcel Account */}
+            <View style={styles.row}>
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Acres</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.acres}
+                  onChangeText={(text) => handleFieldChange("acres", text)}
+                  placeholder="e.g., 0.5"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
+
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Year Built</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.yearBuilt}
+                  onChangeText={(text) => handleFieldChange("yearBuilt", text)}
+                  placeholder="e.g., 2021"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
 
-            {/* Parcel Account */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Parcel Account</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.parcelAccount}
-                onChangeText={(text) => handleFieldChange("parcelAccount", text)}
-                placeholder="Enter parcel account number"
-                placeholderTextColor="#9ca3af"
-              />
+            {/* Parcel Information Row */}
+            <View style={styles.row}>
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Parcel Account</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.parcelAccount}
+                  onChangeText={(text) => handleFieldChange("parcelAccount", text)}
+                  placeholder="Account #"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
+
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Parcel ID</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.parcelId}
+                  onChangeText={(text) => handleFieldChange("parcelId", text)}
+                  placeholder="Parcel ID"
+                  placeholderTextColor="#9ca3af"
+                />
+              </View>
             </View>
 
-            {/* Parcel ID */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Parcel ID</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.parcelId}
-                onChangeText={(text) => handleFieldChange("parcelId", text)}
-                placeholder="Enter parcel ID"
-                placeholderTextColor="#9ca3af"
-              />
-            </View>
+            {/* Square Footage and Stories Row */}
+            <View style={styles.row}>
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Square Footage</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.sqft}
+                  onChangeText={(text) => handleFieldChange("sqft", text)}
+                  placeholder="e.g., 3475"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
 
-            {/* Number of Stories */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Number of Stories</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.numberOfStories}
-                onChangeText={(text) => handleFieldChange("numberOfStories", text)}
-                placeholder="e.g., 2"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Number of Stories</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.numberOfStories}
+                  onChangeText={(text) => handleFieldChange("numberOfStories", text)}
+                  placeholder="e.g., 2"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
 
             {/* Floor Percentages (only show if > 1 story) */}
             {parseInt(formData.numberOfStories) > 1 && (
-              <View className="mb-4">
-                <Text className="text-sm font-medium text-gray-200 mb-3">Floor Percentages</Text>
-                <View className="flex-row flex-wrap">
+              <View style={styles.fieldContainer}>
+                <Text style={styles.fieldLabel}>Floor Percentages</Text>
+                <View style={styles.floorPercentagesRow}>
                   {formData.floorPercentages.map((floor, index) => (
-                    <View key={index} className="mr-3 mb-2" style={{ width: 80 }}>
-                      <Text className="text-gray-300 text-xs mb-1 text-center">Floor {floor.floor}</Text>
+                    <View key={index} style={styles.floorPercentageItem}>
+                      <Text style={styles.floorLabel}>Floor {floor.floor}</Text>
                       <TextInput
-                        className="bg-gray-700 border border-gray-600 rounded-lg p-2 text-gray-100 placeholder-gray-400 text-center"
+                        style={styles.floorInput}
                         value={floor.percentage}
                         onChangeText={(text) => handleFloorPercentageChange(index, text)}
                         placeholder="%"
@@ -505,37 +581,42 @@ const PropertyIDForm = ({
               </View>
             )}
 
-            {/* Square Footage */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Square Footage</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.sqft}
-                onChangeText={(text) => handleFieldChange("sqft", text)}
-                placeholder="e.g., 3475"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
-            </View>
+            {/* Beds and Bathrooms Row */}
+            <View style={styles.row}>
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Bedrooms</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.beds}
+                  onChangeText={(text) => handleFieldChange("beds", text)}
+                  placeholder="e.g., 3"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
 
-            {/* Year Built */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Year Built</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.yearBuilt}
-                onChangeText={(text) => handleFieldChange("yearBuilt", text)}
-                placeholder="e.g., 2021"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
+              <View style={[styles.fieldContainer, styles.halfWidth]}>
+                <Text style={styles.fieldLabel}>Bathrooms</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.bathrooms}
+                  onChangeText={(text) => handleFieldChange("bathrooms", text)}
+                  placeholder="e.g., 2.5"
+                  placeholderTextColor="#9ca3af"
+                  keyboardType="numeric"
+                />
+              </View>
             </View>
+          </View>
 
-            {/* Structure Type */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Structure Type</Text>
+          {/* Structure Information Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Structure Information</Text>
+            
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Structure Type</Text>
               <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
+                style={styles.input}
                 value={formData.structureType}
                 onChangeText={(text) => handleFieldChange("structureType", text)}
                 placeholder="e.g., Ranch, Colonial, Cape Cod"
@@ -543,24 +624,10 @@ const PropertyIDForm = ({
               />
             </View>
 
-            {/* Site Access */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Site Access</Text>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Structure Use</Text>
               <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.siteAccess}
-                onChangeText={(text) => handleFieldChange("siteAccess", text)}
-                placeholder="Describe site access conditions"
-                placeholderTextColor="#9ca3af"
-                multiline
-              />
-            </View>
-
-            {/* Structure Use */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Structure Use</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
+                style={styles.input}
                 value={formData.structureUse}
                 onChangeText={(text) => handleFieldChange("structureUse", text)}
                 placeholder="e.g., Residential, Commercial"
@@ -568,81 +635,67 @@ const PropertyIDForm = ({
               />
             </View>
 
-            {/* Overall Quality */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Overall Quality</Text>
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Site Access</Text>
               <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
+                style={[styles.input, styles.textArea]}
+                value={formData.siteAccess}
+                onChangeText={(text) => handleFieldChange("siteAccess", text)}
+                placeholder="Describe site access conditions"
+                placeholderTextColor="#9ca3af"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Overall Quality</Text>
+              <TextInput
+                style={styles.input}
                 value={formData.overallQuality}
                 onChangeText={(text) => handleFieldChange("overallQuality", text)}
                 placeholder="e.g., Excellent, Good, Fair, Poor"
                 placeholderTextColor="#9ca3af"
               />
             </View>
+          </View>
 
-            {/* Detached Structures */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-3">Detached Structures</Text>
-              <View className="flex-row flex-wrap">
-                {detachedStructureOptions.map((structure) => (
-                  <TouchableOpacity
-                    key={structure}
-                    onPress={() => toggleDetachedStructure(structure)}
-                    className={`mr-2 mb-2 px-4 py-2 rounded-lg border ${
-                      formData.detachedStructures.includes(structure)
-                        ? "bg-blue-600 border-blue-500"
-                        : "bg-gray-700 border-gray-600"
-                    }`}
+          {/* Detached Structures Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Detached Structures</Text>
+            <View style={styles.chipContainer}>
+              {detachedStructureOptions.map((structure) => (
+                <TouchableOpacity
+                  key={structure}
+                  onPress={() => toggleDetachedStructure(structure)}
+                  style={[
+                    styles.chip,
+                    formData.detachedStructures.includes(structure) && styles.chipSelected
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      formData.detachedStructures.includes(structure) && styles.chipTextSelected
+                    ]}
                   >
-                    <Text
-                      className={
-                        formData.detachedStructures.includes(structure)
-                          ? "text-white font-semibold"
-                          : "text-gray-300"
-                      }
-                    >
-                      {structure}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            {/* Bedrooms */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Bedrooms</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.beds}
-                onChangeText={(text) => handleFieldChange("beds", text)}
-                placeholder="e.g., 3"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
-            </View>
-
-            {/* Bathrooms */}
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-200 mb-2">Bathrooms</Text>
-              <TextInput
-                className="bg-gray-700 border border-gray-600 rounded-lg p-3 text-gray-100 placeholder-gray-400"
-                value={formData.bathrooms}
-                onChangeText={(text) => handleFieldChange("bathrooms", text)}
-                placeholder="e.g., 2.5"
-                placeholderTextColor="#9ca3af"
-                keyboardType="numeric"
-              />
+                    {structure}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
           {/* Notes Section */}
-          <View className="bg-gray-800 p-4 rounded-lg border border-gray-600 mb-6">
-            <Text className="text-lg font-semibold mb-4 text-gray-100">Additional Notes</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Additional Notes</Text>
             <TextInput
-              className="bg-gray-700 border border-gray-600 rounded-lg p-3 min-h-[100px] text-gray-100 placeholder-gray-400"
+              style={[styles.input, styles.textArea]}
               placeholder="Enter any additional notes about the property..."
               placeholderTextColor="#9ca3af"
               multiline
+              numberOfLines={4}
               textAlignVertical="top"
               value={formData.notes}
               onChangeText={(text) => handleFieldChange("notes", text)}
@@ -650,47 +703,46 @@ const PropertyIDForm = ({
           </View>
 
           {/* Navigation Buttons */}
-          <View className="flex-row justify-between items-center mt-6 mb-8">
-            {/* Previous Button */}
+          <View style={styles.navigationButtons}>
             <TouchableOpacity
               onPress={handlePrevious}
               disabled={isFirstCategory}
-              className={`flex-1 py-3 px-4 rounded-lg mr-2 border ${
-                isFirstCategory ? "bg-gray-700 border-gray-600" : "bg-gray-600 border-gray-500"
-              }`}
+              style={[
+                styles.navButton,
+                styles.navButtonLeft,
+                isFirstCategory && styles.navButtonDisabled
+              ]}
             >
-              <Text
-                className={`text-center font-semibold ${
-                  isFirstCategory ? "text-gray-400" : "text-gray-100"
-                }`}
-              >
+              <Text style={[
+                styles.navButtonText,
+                isFirstCategory && styles.navButtonTextDisabled
+              ]}>
                 ← Previous
               </Text>
             </TouchableOpacity>
 
-            {/* Complete/Back Button */}
             <TouchableOpacity
               onPress={handleBackToCategories}
-              className="bg-gray-700 py-3 px-6 rounded-lg mx-2 border border-gray-600"
+              style={styles.completeButton}
             >
-              <Text className="text-gray-100 text-center font-semibold">
+              <Text style={styles.completeButtonText}>
                 Complete
               </Text>
             </TouchableOpacity>
 
-            {/* Next Button */}
             <TouchableOpacity
               onPress={handleNext}
               disabled={isLastCategory}
-              className={`flex-1 py-3 px-4 rounded-lg ml-2 border ${
-                isLastCategory ? "bg-gray-700 border-gray-600" : "bg-gray-600 border-gray-500"
-              }`}
+              style={[
+                styles.navButton,
+                styles.navButtonRight,
+                isLastCategory && styles.navButtonDisabled
+              ]}
             >
-              <Text
-                className={`text-center font-semibold ${
-                  isLastCategory ? "text-gray-400" : "text-gray-100"
-                }`}
-              >
+              <Text style={[
+                styles.navButtonText,
+                isLastCategory && styles.navButtonTextDisabled
+              ]}>
                 Next →
               </Text>
             </TouchableOpacity>
@@ -700,5 +752,199 @@ const PropertyIDForm = ({
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#111827',
+    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  header: {
+    backgroundColor: '#1f2937',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+  },
+  backButtonText: {
+    color: '#d1d5db',
+    fontSize: 24,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#f3f4f6',
+  },
+  scrollView: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  content: {
+    padding: 16,
+  },
+  section: {
+    marginBottom: 24,
+    backgroundColor: '#1f2937',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
+    color: '#f3f4f6',
+  },
+  fieldContainer: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+    color: '#e5e7eb',
+  },
+  input: {
+    backgroundColor: '#374151',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    borderRadius: 8,
+    color: '#f3f4f6',
+    fontSize: 16,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  halfWidth: {
+    flex: 1,
+  },
+  suggestionsContainer: {
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    borderRadius: 8,
+    marginTop: 8,
+    maxHeight: 200,
+  },
+  suggestionItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#4b5563',
+  },
+  suggestionText: {
+    color: '#f3f4f6',
+  },
+  loadingContainer: {
+    marginTop: 8,
+  },
+  floorPercentagesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  floorPercentageItem: {
+    width: 80,
+  },
+  floorLabel: {
+    color: '#d1d5db',
+    fontSize: 12,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  floorInput: {
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+    borderRadius: 8,
+    padding: 8,
+    color: '#f3f4f6',
+    textAlign: 'center',
+  },
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  chipSelected: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  chipText: {
+    color: '#d1d5db',
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  navigationButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 32,
+  },
+  navButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    backgroundColor: '#4b5563',
+    borderColor: '#6b7280',
+  },
+  navButtonLeft: {
+    marginRight: 8,
+  },
+  navButtonRight: {
+    marginLeft: 8,
+  },
+  navButtonDisabled: {
+    backgroundColor: '#374151',
+    borderColor: '#4b5563',
+  },
+  navButtonText: {
+    textAlign: 'center',
+    fontWeight: '600',
+    color: '#f3f4f6',
+  },
+  navButtonTextDisabled: {
+    color: '#9ca3af',
+  },
+  completeButton: {
+    backgroundColor: '#374151',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginHorizontal: 8,
+    borderWidth: 1,
+    borderColor: '#4b5563',
+  },
+  completeButtonText: {
+    color: '#f3f4f6',
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+});
 
 export default PropertyIDForm;

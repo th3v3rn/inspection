@@ -15,15 +15,31 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      console.log('=== Attempting Login ===');
+      console.log('Email:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password: password,
       });
 
+      console.log('Login response:', { 
+        hasData: !!data, 
+        hasSession: !!data?.session,
+        hasUser: !!data?.user,
+        error: error?.message 
+      });
+
       if (error) {
+        console.error('Login error:', error);
         Alert.alert('Login Failed', error.message);
+      } else {
+        console.log('✅ Login successful!');
+        console.log('User ID:', data?.user?.id);
+        console.log('User email:', data?.user?.email);
       }
     } catch (error: any) {
+      console.error('Login exception:', error);
       Alert.alert('Error', error.message || 'An unexpected error occurred');
     } finally {
       setLoading(false);
@@ -38,8 +54,7 @@ export default function LoginScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
-        <Text style={styles.title}>Home Inspection Pro</Text>
-        <Text style={styles.subtitle}>Inspector Login</Text>
+        <Text style={styles.title}>Pulse Inspections</Text>
       </View>
       
       <View style={styles.formContainer}>
