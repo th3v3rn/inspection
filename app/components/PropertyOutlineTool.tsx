@@ -439,13 +439,17 @@ const PropertyOutlineTool = ({
     
     if (!propertyId) {
       console.log('No propertyId provided');
-      Alert.alert("Error", "No property ID provided. Cannot save outlines.");
+      Alert.alert(
+        "Complete Property ID First", 
+        "Please complete and save the Property ID section before using the Property Outline Tool. This will create the property record needed to save outlines.",
+        [{ text: "OK" }]
+      );
       return;
     }
 
     if (structures.length === 0) {
       console.log('No structures to save');
-      Alert.alert("Error", "No structures to save.");
+      Alert.alert("Error", "No structures to save. Please draw at least one outline.");
       return;
     }
 
@@ -1533,10 +1537,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   header: {
     padding: 16,
+    paddingTop: Platform.OS === 'android' ? 8 : 16,
     backgroundColor: '#1f2937',
     borderBottomWidth: 1,
     borderBottomColor: '#374151',

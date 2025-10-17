@@ -22,7 +22,7 @@ export default function SavedInspectionsList({ currentUser, onSelectInspection, 
       const { data, error } = await supabase
         .from('inspections')
         .select('*')
-        .eq('user_id', currentUser.id)
+        .eq('inspector_id', currentUser.id)
         .order('updated_at', { ascending: false });
 
       if (error) throw error;

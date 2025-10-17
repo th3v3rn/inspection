@@ -18,6 +18,7 @@ export default function AssignedPropertiesList({ currentUser, onSelectInspection
 
   const loadAssignments = async () => {
     try {
+      // Query the assignments_with_inspections view
       const { data, error } = await supabase
         .from('assignments_with_inspections')
         .select('*')
@@ -25,11 +26,21 @@ export default function AssignedPropertiesList({ currentUser, onSelectInspection
         .order('assignment_id', { ascending: false });
 
       if (error) throw error;
-      setAssignments(data || []);
+      
+      // Transform the data to match the expected format
+      const transformedData = (data || []).map(assignment => ({
+        assignment_id: assignment.assignment_id,
+        inspection_id: assignment.inspection_id,
+        property_id: assignment.inspection_id, // Use inspection_id as property_id
+        address: assignment.address || 'No address',
+        inspection_status: assignment.inspection_status || 'pending',
+      }));
+      
+      setAssignments(transformedData);
     } catch (error) {
       console.error('Error loading assignments:', error);
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   };
 
@@ -65,10 +76,11 @@ export default function AssignedPropertiesList({ currentUser, onSelectInspection
                 key={assignment.assignment_id}
                 style={styles.assignmentCard}
                 onPress={() => {
-                  // Create inspection object from the view data
+                  // Create inspection object from the assignment data
                   const inspection = {
-                    id: assignment.inspection_id_actual,
+                    id: assignment.inspection_id, // Use the actual inspection ID
                     address: assignment.address,
+                    property_id: assignment.property_id,
                     status: assignment.inspection_status,
                   };
                   onSelectInspection(inspection);

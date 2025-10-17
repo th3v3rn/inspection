@@ -89,7 +89,7 @@ export default function AdminDashboard({ currentUser, onBack, onNavigateToProper
     }
 
     try {
-      // Create assignment record
+      // Create assignment record with inspection_id only
       const { error: assignmentError } = await supabase
         .from('assignments')
         .insert({
