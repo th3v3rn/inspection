@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform, Alert, Modal } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { ChevronDown, UserPlus } from 'lucide-react-native';
+import { ChevronDown, UserPlus, Settings as SettingsIcon } from 'lucide-react-native';
+import Settings from './Settings';
 
 interface AdminDashboardProps {
   currentUser: any;
   onBack: () => void;
   onNavigateToPropertyLookup?: () => void;
+  isDarkMode?: boolean;
+  onToggleTheme?: (isDark: boolean) => void;
 }
 
-export default function AdminDashboard({ currentUser, onBack, onNavigateToPropertyLookup }: AdminDashboardProps) {
+export default function AdminDashboard({ currentUser, onBack, onNavigateToPropertyLookup, isDarkMode = true, onToggleTheme }: AdminDashboardProps) {
   const [inspectors, setInspectors] = useState<any[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +22,7 @@ export default function AdminDashboard({ currentUser, onBack, onNavigateToProper
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedInspection, setSelectedInspection] = useState<any>(null);
   const [selectedInspectorId, setSelectedInspectorId] = useState<string>('');
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -119,16 +123,32 @@ export default function AdminDashboard({ currentUser, onBack, onNavigateToProper
     );
   }
 
+  if (showSettings) {
+    return (
+      <Settings
+        currentUser={currentUser}
+        onClose={() => setShowSettings(false)}
+        isDarkMode={isDarkMode}
+        onToggleTheme={onToggleTheme || (() => {})}
+      />
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#111827" />
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Back</Text>
+          <View>
+            <TouchableOpacity onPress={onBack} style={styles.backButton}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Admin Dashboard</Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.settingsButton}>
+            <SettingsIcon size={24} color="#9ca3af" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Admin Dashboard</Text>
         </View>
 
         <ScrollView style={styles.scrollView}>
@@ -315,6 +335,9 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 24,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   backButton: {
     marginBottom: 12,
@@ -328,6 +351,9 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#f3f4f6',
+  },
+  settingsButton: {
+    padding: 8,
   },
   scrollView: {
     flex: 1,

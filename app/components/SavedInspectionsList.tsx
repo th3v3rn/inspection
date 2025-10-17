@@ -7,9 +7,11 @@ interface SavedInspectionsListProps {
   onSelectInspection: (inspection: any) => void;
   onBack: () => void;
   onInspectionDeleted?: () => void;
+  isDarkMode?: boolean;
+  onToggleTheme?: (isDark: boolean) => void;
 }
 
-export default function SavedInspectionsList({ currentUser, onSelectInspection, onBack, onInspectionDeleted }: SavedInspectionsListProps) {
+export default function SavedInspectionsList({ currentUser, onSelectInspection, onBack, onInspectionDeleted, isDarkMode = true, onToggleTheme }: SavedInspectionsListProps) {
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,10 +86,12 @@ export default function SavedInspectionsList({ currentUser, onSelectInspection, 
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Saved Inspections</Text>
+          <View>
+            <TouchableOpacity onPress={onBack} style={styles.backButton}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Saved Inspections</Text>
+          </View>
         </View>
 
         {/* Inspections List */}
