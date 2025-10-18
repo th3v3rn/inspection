@@ -6,9 +6,10 @@ interface AssignedPropertiesListProps {
   currentUser: any;
   onSelectInspection: (inspection: any) => void;
   onBack: () => void;
+  isDarkMode?: boolean;
 }
 
-export default function AssignedPropertiesList({ currentUser, onSelectInspection, onBack }: AssignedPropertiesListProps) {
+export default function AssignedPropertiesList({ currentUser, onSelectInspection, onBack, isDarkMode = true }: AssignedPropertiesListProps) {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -46,15 +47,15 @@ export default function AssignedPropertiesList({ currentUser, onSelectInspection
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, !isDarkMode && styles.loadingContainerLight]}>
         <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
       <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
@@ -121,10 +122,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  loadingContainerLight: {
+    backgroundColor: '#ffffff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#111827',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,

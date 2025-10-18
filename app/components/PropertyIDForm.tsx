@@ -411,11 +411,11 @@ const PropertyIDForm = ({
 
   if (isLoadingPropertyData && !globalPropertyData) {
     return (
-      <SafeAreaView className="flex-1 bg-gray-900" style={{ paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 }}>
-        <StatusBar barStyle="light-content" backgroundColor="#111827" />
-        <View className="flex-1 bg-gray-900 justify-center items-center">
-          <ActivityIndicator size="large" color="#9ca3af" />
-          <Text className="mt-4 text-gray-300">Loading property data...</Text>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={{ marginTop: 16, color: '#6b7280' }}>Loading property data...</Text>
         </View>
       </SafeAreaView>
     );
@@ -423,7 +423,7 @@ const PropertyIDForm = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header with Back Button */}
       <View style={styles.header}>
@@ -756,13 +756,13 @@ const PropertyIDForm = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
   },
   header: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: '#e5e7eb',
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -771,34 +771,34 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   backButtonText: {
-    color: '#d1d5db',
+    color: '#111827',
     fontSize: 24,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#f3f4f6',
+    color: '#111827',
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
   },
   section: {
     marginBottom: 24,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   fieldContainer: {
     marginBottom: 16,
@@ -807,15 +807,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 8,
-    color: '#e5e7eb',
+    color: '#374151',
   },
   input: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     padding: 12,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
-    color: '#f3f4f6',
+    color: '#111827',
     fontSize: 16,
   },
   textArea: {
@@ -830,9 +830,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   suggestionsContainer: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     marginTop: 8,
     maxHeight: 200,
@@ -840,10 +840,10 @@ const styles = StyleSheet.create({
   suggestionItem: {
     padding: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#4b5563',
+    borderBottomColor: '#e5e7eb',
   },
   suggestionText: {
-    color: '#f3f4f6',
+    color: '#111827',
   },
   loadingContainer: {
     marginTop: 8,
@@ -857,18 +857,18 @@ const styles = StyleSheet.create({
     width: 80,
   },
   floorLabel: {
-    color: '#d1d5db',
+    color: '#374151',
     fontSize: 12,
     marginBottom: 4,
     textAlign: 'center',
   },
   floorInput: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     padding: 8,
-    color: '#f3f4f6',
+    color: '#111827',
     textAlign: 'center',
   },
   chipContainer: {
@@ -880,16 +880,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   chipSelected: {
     backgroundColor: '#3b82f6',
     borderColor: '#2563eb',
   },
   chipText: {
-    color: '#d1d5db',
+    color: '#374151',
     fontWeight: '500',
   },
   chipTextSelected: {
@@ -909,8 +909,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    backgroundColor: '#4b5563',
-    borderColor: '#6b7280',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
   },
   navButtonLeft: {
     marginRight: 8,
@@ -919,28 +919,28 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   navButtonDisabled: {
-    backgroundColor: '#374151',
-    borderColor: '#4b5563',
+    backgroundColor: '#e5e7eb',
+    borderColor: '#d1d5db',
   },
   navButtonText: {
     textAlign: 'center',
     fontWeight: '600',
-    color: '#f3f4f6',
+    color: '#111827',
   },
   navButtonTextDisabled: {
     color: '#9ca3af',
   },
   completeButton: {
-    backgroundColor: '#374151',
+    backgroundColor: '#3b82f6',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     marginHorizontal: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#2563eb',
   },
   completeButtonText: {
-    color: '#f3f4f6',
+    color: '#ffffff',
     textAlign: 'center',
     fontWeight: '600',
   },

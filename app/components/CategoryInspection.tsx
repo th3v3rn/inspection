@@ -21,7 +21,7 @@ import PropertyIDForm from "./PropertyIDForm";
 import { useProperty } from "../contexts/PropertyContext";
 import { v4 as uuidv4 } from 'uuid';
 import 'react-native-get-random-values';
-import { useAudioRecorder, useAudioRecorderState, AudioModule } from 'expo-audio';
+import { AudioModule } from 'expo-audio';
 
 interface CategoryInspectionProps {
   category: string;
@@ -34,6 +34,7 @@ interface CategoryInspectionProps {
   isLastCategory?: boolean;
   address?: string;
   inspectionId?: string;
+  isDarkMode?: boolean;
 }
 
 export default function CategoryInspection({
@@ -47,37 +48,9 @@ export default function CategoryInspection({
   isLastCategory = false,
   address = "",
   inspectionId: inspectionIdProp,
+  isDarkMode = true,
 }: CategoryInspectionProps) {
   const { propertyData: globalPropertyData, isPropertyDataAvailable } = useProperty();
-  
-  // Initialize audio recorder with expo-audio
-  const audioRecorder = useAudioRecorder({
-    android: {
-      extension: '.m4a',
-      outputFormat: 'mpeg4',
-      audioEncoder: 'aac',
-      sampleRate: 44100,
-      numberOfChannels: 2,
-      bitRate: 128000,
-    },
-    ios: {
-      extension: '.m4a',
-      audioQuality: 'max',
-      sampleRate: 44100,
-      numberOfChannels: 2,
-      bitRate: 128000,
-      linearPCMBitDepth: 16,
-      linearPCMIsBigEndian: false,
-      linearPCMIsFloat: false,
-    },
-    web: {
-      mimeType: 'audio/webm',
-      bitsPerSecond: 128000,
-    },
-  });
-
-  // Get the recorder state
-  const recorderState = useAudioRecorderState(audioRecorder);
   
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
@@ -85,6 +58,7 @@ export default function CategoryInspection({
   const [images, setImages] = useState<LocalImage[]>([]);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasAudioPermission, setHasAudioPermission] = useState(false);
+  const [audioRecorder, setAudioRecorder] = useState<any>(null);
 
   // Request audio permissions on mount
   useEffect(() => {
@@ -94,6 +68,9 @@ export default function CategoryInspection({
   const requestAudioPermissions = async () => {
     try {
       console.log("Requesting audio permissions...");
+      console.log("Platform:", Platform.OS);
+      console.log("Is Simulator:", Platform.isTV); // This will help identify simulator
+      
       const permission = await AudioModule.requestRecordingPermissionsAsync();
       console.log("Permission result:", permission);
       
@@ -103,36 +80,24 @@ export default function CategoryInspection({
       } else {
         setHasAudioPermission(false);
         console.log("Audio permission denied");
+        
+        // Show different message for simulator
         Alert.alert(
-          "Microphone Permission Required",
-          "Please enable microphone access in your device settings to use voice recording.",
+          "Microphone Not Available",
+          Platform.OS === 'ios' 
+            ? "Microphone is not available in the iOS Simulator. Please test on a real device."
+            : "Please enable microphone access in your device settings.",
           [{ text: "OK" }]
         );
       }
     } catch (error) {
       console.error("Error requesting audio permissions:", error);
-      Alert.alert("Error", "Failed to request microphone permissions");
+      Alert.alert(
+        "Microphone Error",
+        `Failed to access microphone: ${error.message}\n\nNote: Microphone is not available in iOS Simulator.`
+      );
     }
   };
-
-  // Prepare the recorder when component mounts
-  useEffect(() => {
-    const prepareRecorder = async () => {
-      if (!hasAudioPermission) return;
-      
-      try {
-        console.log("Preparing audio recorder...");
-        await audioRecorder.prepareToRecordAsync();
-        console.log("Audio recorder prepared, canRecord:", recorderState.canRecord);
-      } catch (error) {
-        console.error("Failed to prepare recorder:", error);
-      }
-    };
-    
-    if (hasAudioPermission) {
-      prepareRecorder();
-    }
-  }, [hasAudioPermission]);
 
   // Dynamic form data based on category
   const getInitialFormData = (cat: string) => {
@@ -478,18 +443,14 @@ export default function CategoryInspection({
         }));
 
         console.log("About to stop recording...");
-        console.log("Recorder state before stop:", recorderState);
         
+        if (!audioRecorder) {
+          throw new Error("No active recording");
+        }
+
         // Stop the recording
-        await audioRecorder.stop();
-        console.log("Recording stopped");
-        
-        // Wait a moment for state to update
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Get the URI from the recorder
-        const uri = audioRecorder.uri || recordingUri;
-        console.log("Final URI:", uri);
+        const uri = await audioRecorder.stopAndUnloadAsync();
+        console.log("Recording stopped, URI:", uri);
 
         if (!uri) {
           throw new Error("No recording URI returned");
@@ -505,7 +466,7 @@ export default function CategoryInspection({
           // Create form fields structure for AI processing - category specific
           const formFields = getFormFields(category, formData);
 
-          // Process with AI form filler using the correct method name
+          // Process with AI form filler
           setDebugInfo((prev) => ({
             ...prev,
             aiResponse: "Processing AI response...",
@@ -547,6 +508,9 @@ export default function CategoryInspection({
             error: "No transcript received from speech service",
           }));
         }
+        
+        // Clean up recorder
+        setAudioRecorder(null);
       } catch (error) {
         console.error("Voice recording error:", error);
         setDebugInfo((prev) => ({
@@ -555,18 +519,11 @@ export default function CategoryInspection({
           error: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
         }));
         Alert.alert("Error", "Failed to process voice recording");
+        setAudioRecorder(null);
       }
     } else {
       try {
         console.log("Preparing to record...");
-        console.log("Can record?", recorderState.canRecord);
-        
-        if (!recorderState.canRecord) {
-          console.log("Recorder not ready, preparing...");
-          await audioRecorder.prepareToRecordAsync();
-          // Wait for state to update
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
         
         setIsRecording(true);
         setDebugInfo({
@@ -576,20 +533,34 @@ export default function CategoryInspection({
           confidence: 0,
         });
         
-        console.log("About to start recording...");
-        console.log("Recorder state before start:", recorderState);
+        // Create a new recording using Audio module
+        const { recording } = await AudioModule.createRecordingAsync({
+          android: {
+            extension: '.m4a',
+            outputFormat: 'mpeg4',
+            audioEncoder: 'aac',
+            sampleRate: 44100,
+            numberOfChannels: 2,
+            bitRate: 128000,
+          },
+          ios: {
+            extension: '.m4a',
+            audioQuality: 'max',
+            sampleRate: 44100,
+            numberOfChannels: 2,
+            bitRate: 128000,
+            linearPCMBitDepth: 16,
+            linearPCMIsBigEndian: false,
+            linearPCMIsFloat: false,
+          },
+          web: {
+            mimeType: 'audio/webm',
+            bitsPerSecond: 128000,
+          },
+        });
         
-        // Start recording using expo-audio
-        await audioRecorder.record();
-        
-        // Store the URI immediately
-        if (audioRecorder.uri) {
-          setRecordingUri(audioRecorder.uri);
-        }
-        
+        setAudioRecorder(recording);
         console.log("Recording started successfully");
-        console.log("Recorder state after start:", recorderState);
-        console.log("Recording URI:", audioRecorder.uri);
         
         setDebugInfo((prev) => ({
           ...prev,
@@ -603,7 +574,7 @@ export default function CategoryInspection({
           transcript: "",
           error: `Recording start error: ${error instanceof Error ? error.message : "Unknown error"}`,
         }));
-        Alert.alert("Error", "Failed to start recording");
+        Alert.alert("Error", "Failed to start recording. Please check microphone permissions.");
       }
     }
   };
@@ -1526,7 +1497,7 @@ export default function CategoryInspection({
   // For all other categories, use the existing form
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <ScrollView style={styles.scrollView}>
         <View style={styles.content}>
           {/* Header */}
@@ -1858,11 +1829,17 @@ export default function CategoryInspection({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   scrollView: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
+  },
+  scrollViewLight: {
+    backgroundColor: '#ffffff',
   },
   content: {
     padding: 16,
@@ -1873,12 +1850,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#f3f4f6',
+    color: '#111827',
     marginBottom: 8,
   },
   headerSubtitle: {
     fontSize: 14,
-    color: '#d1d5db',
+    color: '#6b7280',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1896,24 +1873,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   normalButton: {
-    backgroundColor: '#374151',
-    borderColor: '#4b5563',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
   },
   recordingButton: {
     backgroundColor: '#dc2626',
     borderColor: '#ef4444',
   },
   disabledButton: {
-    backgroundColor: '#4b5563',
-    borderColor: '#6b7280',
+    backgroundColor: '#e5e7eb',
+    borderColor: '#d1d5db',
   },
   actionButtonIcon: {
-    color: '#ffffff',
+    color: '#111827',
     fontWeight: '600',
     marginRight: 8,
   },
   actionButtonText: {
-    color: '#ffffff',
+    color: '#111827',
     fontWeight: '600',
   },
   imagesSection: {
@@ -1923,7 +1900,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 12,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   imagesRow: {
     flexDirection: 'row',
@@ -2034,43 +2011,43 @@ const styles = StyleSheet.create({
   debugInfo: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f3f4f6',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   debugTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#e5e7eb',
+    color: '#111827',
     marginBottom: 4,
   },
   debugText: {
     fontSize: 14,
-    color: '#d1d5db',
+    color: '#374151',
   },
   debugConfidence: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: '#6b7280',
     marginTop: 4,
   },
   errorInfo: {
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#7f1d1d',
+    backgroundColor: '#fee2e2',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#991b1b',
+    borderColor: '#fecaca',
   },
   errorTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#fecaca',
+    color: '#991b1b',
     marginBottom: 4,
   },
   errorText: {
     fontSize: 14,
-    color: '#fca5a5',
+    color: '#dc2626',
   },
   formSection: {
     marginBottom: 24,
@@ -2079,7 +2056,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 16,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   fieldContainer: {
     marginBottom: 16,
@@ -2088,59 +2065,59 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginBottom: 8,
-    color: '#e5e7eb',
+    color: '#374151',
   },
   input: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 12,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     minHeight: 80,
-    color: '#f3f4f6',
+    color: '#111827',
     textAlignVertical: 'top',
   },
   pickerContainer: {
-    backgroundColor: '#374151',
+    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     overflow: 'hidden',
   },
   picker: {
     height: 50,
-    color: '#f3f4f6',
-    backgroundColor: '#374151',
+    color: '#111827',
+    backgroundColor: '#f9fafb',
   },
   checkboxContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 12,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
   },
   checkbox: {
     width: 24,
     height: 24,
     borderWidth: 2,
-    borderColor: '#6b7280',
+    borderColor: '#9ca3af',
     borderRadius: 4,
     marginRight: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkboxChecked: {
-    backgroundColor: '#4b5563',
-    borderColor: '#6b7280',
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
   },
   checkboxCheck: {
     color: '#ffffff',
     fontWeight: 'bold',
   },
   checkboxLabel: {
-    color: '#e5e7eb',
+    color: '#374151',
   },
   dateTimeRow: {
     flexDirection: 'row',
@@ -2150,16 +2127,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   nowButton: {
-    backgroundColor: '#374151',
+    backgroundColor: '#f3f4f6',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     justifyContent: 'center',
   },
   nowButtonText: {
-    color: '#f3f4f6',
+    color: '#111827',
     fontWeight: '600',
   },
   navigationButtons: {
@@ -2175,8 +2152,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 8,
     borderWidth: 1,
-    backgroundColor: '#4b5563',
-    borderColor: '#6b7280',
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
   },
   navButtonLeft: {
     marginRight: 8,
@@ -2185,28 +2162,28 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   navButtonDisabled: {
-    backgroundColor: '#374151',
-    borderColor: '#4b5563',
+    backgroundColor: '#e5e7eb',
+    borderColor: '#d1d5db',
   },
   navButtonText: {
     textAlign: 'center',
     fontWeight: '600',
-    color: '#f3f4f6',
+    color: '#111827',
   },
   navButtonTextDisabled: {
     color: '#9ca3af',
   },
   completeButton: {
-    backgroundColor: '#374151',
+    backgroundColor: '#3b82f6',
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 8,
     marginHorizontal: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#2563eb',
   },
   completeButtonText: {
-    color: '#f3f4f6',
+    color: '#ffffff',
     textAlign: 'center',
     fontWeight: '600',
   },

@@ -51,6 +51,7 @@ interface InspectionFormProps {
   initialData?: any;
   inspectionId?: string;
   onSave?: () => void;
+  isDarkMode?: boolean;
 }
 
 // Helper function to calculate completion percentage for a category
@@ -86,7 +87,8 @@ export default function InspectionForm({
   initialData = null,
   onCancel, 
   onComplete, 
-  onSave 
+  onSave,
+  isDarkMode = true
 }: InspectionFormProps) {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -221,8 +223,8 @@ export default function InspectionForm({
   // Show loading if currentUser is not available yet
   if (!currentUser) {
     return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#9ca3af" />
           <Text style={styles.loadingText}>Loading...</Text>
@@ -557,7 +559,7 @@ export default function InspectionForm({
       
       // Store in ref for immediate access - THIS IS CRITICAL
       propertyIdRef.current = categoryData.property_id;
-      console.log("��� propertyIdRef.current set to:", propertyIdRef.current);
+      console.log("propertyIdRef.current set to:", propertyIdRef.current);
       
       // Update formData with property_id - this will trigger re-render
       setFormData((prev) => ({
@@ -983,7 +985,7 @@ export default function InspectionForm({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       {showPropertyOutlineTool ? (
         <PropertyOutlineTool
           address={formData.address}
@@ -1183,7 +1185,10 @@ export default function InspectionForm({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   content: {
     flex: 1,
@@ -1195,7 +1200,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   loadingText: {
-    color: '#9ca3af',
+    color: '#6b7280',
     marginTop: 16,
     fontSize: 16,
   },
@@ -1205,29 +1210,29 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#f3f4f6',
+    color: '#111827',
   },
   closeButton: {
     marginRight: 12,
   },
   card: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 16,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
   },
   cardTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 16,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   methodSelector: {
     flexDirection: 'row',
     marginBottom: 24,
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: '#e5e7eb',
     paddingBottom: 16,
   },
   methodButton: {
@@ -1236,7 +1241,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   methodButtonActive: {
-    backgroundColor: '#374151',
+    backgroundColor: '#e5e7eb',
     borderRadius: 8,
   },
   methodButtonText: {
@@ -1244,20 +1249,20 @@ const styles = StyleSheet.create({
     color: '#6b7280',
   },
   methodButtonTextActive: {
-    color: '#9ca3af',
+    color: '#111827',
   },
   searchInputContainer: {
     position: 'relative',
     marginBottom: 16,
   },
   searchInput: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     padding: 12,
     paddingLeft: 40,
-    color: '#f3f4f6',
+    color: '#111827',
     fontSize: 16,
   },
   searchIcon: {
@@ -1273,45 +1278,45 @@ const styles = StyleSheet.create({
   },
   suggestionsContainer: {
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
     borderRadius: 8,
     marginBottom: 16,
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
   },
   suggestionItem: {
     padding: 12,
   },
   suggestionItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: '#4b5563',
+    borderBottomColor: '#e5e7eb',
   },
   suggestionText: {
-    color: '#f3f4f6',
+    color: '#111827',
   },
   manualInputContainer: {
     marginBottom: 16,
   },
   input: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
-    color: '#f3f4f6',
+    color: '#111827',
     fontSize: 16,
   },
   primaryButton: {
-    backgroundColor: '#374151',
+    backgroundColor: '#3b82f6',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#2563eb',
   },
   primaryButtonText: {
-    color: '#f3f4f6',
+    color: '#ffffff',
     fontWeight: '600',
   },
   buttonDisabled: {
@@ -1332,13 +1337,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
     padding: 12,
-    backgroundColor: '#374151',
+    backgroundColor: '#f3f4f6',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   completeToggleText: {
-    color: '#f3f4f6',
+    color: '#111827',
     fontWeight: '500',
   },
   toggleSwitch: {
@@ -1346,7 +1351,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     padding: 4,
-    backgroundColor: '#4b5563',
+    backgroundColor: '#d1d5db',
   },
   toggleSwitchActive: {
     backgroundColor: '#10b981',
@@ -1361,7 +1366,7 @@ const styles = StyleSheet.create({
     marginLeft: 'auto',
   },
   propertyAddress: {
-    color: '#9ca3af',
+    color: '#6b7280',
     marginBottom: 16,
   },
   categoriesScroll: {
@@ -1377,8 +1382,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#4b5563',
-    backgroundColor: '#374151',
+    borderColor: '#d1d5db',
+    backgroundColor: '#ffffff',
     overflow: 'hidden',
   },
   categoryItemCompleted: {
@@ -1386,17 +1391,17 @@ const styles = StyleSheet.create({
   },
   categoryItemText: {
     fontWeight: '500',
-    color: '#f3f4f6',
+    color: '#111827',
   },
   categoryItemTextCompleted: {
-    color: '#6ee7b7',
+    color: '#059669',
   },
   categoryItemRight: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   completedBadge: {
-    color: '#6ee7b7',
+    color: '#059669',
     marginRight: 8,
   },
   categoryItemContent: {
@@ -1406,7 +1411,7 @@ const styles = StyleSheet.create({
   },
   progressBarContainer: {
     height: 4,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#e5e7eb',
     borderRadius: 2,
     marginTop: 12,
     overflow: 'hidden',
@@ -1417,7 +1422,7 @@ const styles = StyleSheet.create({
     transition: 'width 0.3s ease',
   },
   secondaryButton: {
-    backgroundColor: '#374151',
+    backgroundColor: '#f3f4f6',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1426,31 +1431,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   secondaryButtonText: {
-    color: '#9ca3af',
+    color: '#111827',
     fontWeight: '600',
     marginLeft: 8,
   },
   backButton: {
-    backgroundColor: '#4b5563',
+    backgroundColor: '#e5e7eb',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#6b7280',
+    borderColor: '#d1d5db',
   },
   backButtonText: {
-    color: '#f3f4f6',
+    color: '#111827',
     fontWeight: '600',
   },
   categorySelection: {
     flex: 1,
     padding: 16,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#ffffff',
   },
   categorySelectionContent: {
     paddingBottom: 24,
@@ -1458,7 +1463,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#f3f4f6',
+    color: '#111827',
     marginBottom: 16,
   },
 });

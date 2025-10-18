@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Switch, Alert, SafeAreaView, StatusBar, StyleSheet, Platform, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Switch, Alert, SafeAreaView, StyleSheet, Platform, TextInput } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { supabase } from '../../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -105,120 +106,115 @@ export default function Settings({ currentUser, onClose, isDarkMode, onToggleThe
   };
 
   return (
-    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Settings</Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Text style={[styles.closeButtonText, !isDarkMode && styles.closeButtonTextLight]}>✕</Text>
-          </TouchableOpacity>
-        </View>
-
-        {loading ? (
-          <View style={styles.loadingContainer}>
-            <Text style={[styles.loadingText, !isDarkMode && styles.loadingTextLight]}>Loading...</Text>
+    <View style={[styles.rootBackground, !isDarkMode && styles.rootBackgroundLight]}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <SafeAreaView style={[styles.safeArea, !isDarkMode && styles.safeAreaLight]}>
+        <View style={[styles.content, !isDarkMode && styles.contentLight]}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Settings</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Text style={[styles.closeButtonText, !isDarkMode && styles.closeButtonTextLight]}>✕</Text>
+            </TouchableOpacity>
           </View>
-        ) : (
-          <ScrollView style={styles.scrollView}>
-            {/* User Info Section */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Account Information</Text>
-              <View style={[styles.infoCard, !isDarkMode && styles.infoCardLight]}>
-                <View style={styles.infoColumn}>
-                  <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Name</Text>
-                  <TextInput
-                    style={[styles.input, !isDarkMode && styles.inputLight]}
-                    value={fullName}
-                    onChangeText={setFullName}
-                    placeholder="Enter your name"
-                    placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
-                  />
-                </View>
-                <View style={styles.infoRow}>
-                  <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Email</Text>
-                  <Text style={[styles.infoValue, !isDarkMode && styles.infoValueLight]}>
-                    {currentUser.email}
-                  </Text>
-                </View>
-                <View style={styles.infoRow}>
-                  <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Role</Text>
-                  <Text style={[styles.infoValue, !isDarkMode && styles.infoValueLight]}>
-                    {getRoleDisplay()}
-                  </Text>
-                </View>
-              </View>
-              
-              {/* Save Button */}
-              <TouchableOpacity
-                style={[styles.saveButton, !isDarkMode && styles.saveButtonLight]}
-                onPress={handleSaveProfile}
-                disabled={saving}
-              >
-                <Text style={styles.saveButtonText}>
-                  {saving ? 'Saving...' : 'Save Changes'}
-                </Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Appearance Section */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Appearance</Text>
-              <View style={[styles.settingCard, !isDarkMode && styles.settingCardLight]}>
-                <View style={styles.settingRow}>
-                  <View style={styles.settingInfo}>
-                    <Text style={[styles.settingLabel, !isDarkMode && styles.settingLabelLight]}>Dark Mode</Text>
-                    <Text style={[styles.settingDescription, !isDarkMode && styles.settingDescriptionLight]}>
-                      Use dark theme throughout the app
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={[styles.loadingText, !isDarkMode && styles.loadingTextLight]}>Loading...</Text>
+            </View>
+          ) : (
+            <ScrollView style={styles.scrollView}>
+              {/* User Info Section */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Account Information</Text>
+                <View style={[styles.infoCard, !isDarkMode && styles.infoCardLight]}>
+                  <View style={styles.infoColumn}>
+                    <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Name</Text>
+                    <TextInput
+                      style={[styles.input, !isDarkMode && styles.inputLight]}
+                      value={fullName}
+                      onChangeText={setFullName}
+                      placeholder="Enter your name"
+                      placeholderTextColor={isDarkMode ? '#6b7280' : '#9ca3af'}
+                    />
+                  </View>
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Email</Text>
+                    <Text style={[styles.infoValue, !isDarkMode && styles.infoValueLight]}>
+                      {currentUser.email}
                     </Text>
                   </View>
-                  <Switch
-                    value={isDarkMode}
-                    onValueChange={handleThemeToggle}
-                    trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
-                    thumbColor={isDarkMode ? '#ffffff' : '#f3f4f6'}
-                  />
+                  <View style={styles.infoRow}>
+                    <Text style={[styles.infoLabel, !isDarkMode && styles.infoLabelLight]}>Role</Text>
+                    <Text style={[styles.infoValue, !isDarkMode && styles.infoValueLight]}>
+                      {getRoleDisplay()}
+                    </Text>
+                  </View>
                 </View>
+                
+                {/* Save Button */}
+                <TouchableOpacity
+                  style={[styles.saveButton, !isDarkMode && styles.saveButtonLight]}
+                  onPress={handleSaveProfile}
+                  disabled={saving}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Text>
+                </TouchableOpacity>
               </View>
-            </View>
 
-            {/* Security Section */}
-            <View style={styles.section}>
-              <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Security</Text>
-              <TouchableOpacity
-                style={[styles.actionButton, !isDarkMode && styles.actionButtonLight]}
-                onPress={handlePasswordReset}
-                disabled={resettingPassword}
-              >
-                <Text style={[styles.actionButtonText, !isDarkMode && styles.actionButtonTextLight]}>
-                  {resettingPassword ? 'Sending...' : 'Reset Password'}
+              {/* Security Section */}
+              <View style={styles.section}>
+                <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Security</Text>
+                <TouchableOpacity
+                  style={[styles.actionButton, !isDarkMode && styles.actionButtonLight]}
+                  onPress={handlePasswordReset}
+                  disabled={resettingPassword}
+                >
+                  <Text style={[styles.actionButtonText, !isDarkMode && styles.actionButtonTextLight]}>
+                    {resettingPassword ? 'Sending...' : 'Reset Password'}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={[styles.helperText, !isDarkMode && styles.helperTextLight]}>
+                  A password reset link will be sent to your email
                 </Text>
-              </TouchableOpacity>
-              <Text style={[styles.helperText, !isDarkMode && styles.helperTextLight]}>
-                A password reset link will be sent to your email
-              </Text>
-            </View>
+              </View>
 
-            {/* Sign Out Section */}
-            <View style={styles.section}>
-              <TouchableOpacity
-                style={[styles.signOutButton, !isDarkMode && styles.signOutButtonLight]}
-                onPress={async () => {
-                  await supabase.auth.signOut();
-                }}
-              >
-                <Text style={styles.signOutButtonText}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        )}
-      </View>
-    </SafeAreaView>
+              {/* Sign Out Section */}
+              <View style={styles.section}>
+                <TouchableOpacity
+                  style={[styles.signOutButton, !isDarkMode && styles.signOutButtonLight]}
+                  onPress={async () => {
+                    await supabase.auth.signOut();
+                  }}
+                >
+                  <Text style={styles.signOutButtonText}>Sign Out</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          )}
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  rootBackground: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  rootBackgroundLight: {
+    backgroundColor: '#ffffff',
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  safeAreaLight: {
+    backgroundColor: '#ffffff',
+  },
   container: {
     flex: 1,
     backgroundColor: '#111827',
@@ -229,6 +225,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+    backgroundColor: '#111827',
+  },
+  contentLight: {
+    backgroundColor: '#ffffff',
   },
   header: {
     flexDirection: 'row',

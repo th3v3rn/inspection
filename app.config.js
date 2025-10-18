@@ -6,14 +6,17 @@ export default {
     orientation: "portrait",
     icon: "./assets/images/icon.png",
     scheme: "myapp",
-    userInterfaceStyle: "automatic",
+    userInterfaceStyle: "light",
+    backgroundColor: "#ffffff",
     newArchEnabled: true,
     ios: {
       supportsTablet: true,
       infoPlist: {
         NSSpeechRecognitionUsageDescription: "Allow $(PRODUCT_NAME) to use speech recognition.",
         NSMicrophoneUsageDescription: "Allow $(PRODUCT_NAME) to use the microphone.",
-        ITSAppUsesNonExemptEncryption: false
+        ITSAppUsesNonExemptEncryption: false,
+        UIViewControllerBasedStatusBarAppearance: false,
+        UIStatusBarStyle: "UIStatusBarStyleDefault"
       },
       bundleIdentifier: "com.th3v3rn.testtempo"
     },
