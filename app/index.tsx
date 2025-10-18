@@ -4,13 +4,13 @@ import {
   Text,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
-  StatusBar,
   ActivityIndicator,
-  Platform,
-  AppState,
+  Alert,
+  SafeAreaView,
   StyleSheet,
-} from "react-native";
+  Platform,
+} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Wifi, WifiOff, Plus, List, RefreshCw, Settings as SettingsIcon } from "lucide-react-native";
 import { Image } from "expo-image";
@@ -36,8 +36,17 @@ export default function Index() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'inspection' | 'saved' | 'admin' | 'assigned' | 'settings'>('dashboard');
   const [selectedInspection, setSelectedInspection] = useState<any>(null);
   const [recentInspections, setRecentInspections] = useState<any[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [userFullName, setUserFullName] = useState<string | null>(null);
+
+  const handleToggleTheme = async (newTheme: boolean) => {
+    setIsDarkMode(newTheme);
+    try {
+      await AsyncStorage.setItem('theme', newTheme ? 'dark' : 'light');
+    } catch (error) {
+      console.error('Error saving theme:', error);
+    }
+  };
 
   useEffect(() => {
     // Load theme preference
@@ -46,9 +55,13 @@ export default function Index() {
         const theme = await AsyncStorage.getItem('theme');
         if (theme) {
           setIsDarkMode(theme === 'dark');
+        } else {
+          // Default to light mode if no preference saved
+          setIsDarkMode(false);
         }
       } catch (error) {
         console.error('Error loading theme:', error);
+        setIsDarkMode(false); // Default to light mode on error
       }
     };
     
@@ -196,7 +209,8 @@ export default function Index() {
 
   if (checkingAuth) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.loadingContainer, !isDarkMode && styles.loadingContainerLight]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
         <ActivityIndicator size="large" color="#9ca3af" />
         <Text style={styles.loadingText}>Loading...</Text>
       </View>
@@ -210,47 +224,58 @@ export default function Index() {
   // Show Admin Dashboard
   if (currentView === 'admin') {
     return (
-      <AdminDashboard 
-        currentUser={user}
-        onBack={() => setCurrentView('dashboard')}
-        onNavigateToPropertyLookup={() => setCurrentView('inspection')}
-        isDarkMode={isDarkMode}
-        onToggleTheme={setIsDarkMode}
-      />
+      <View style={[styles.rootContainer, !isDarkMode && styles.rootContainerLight]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <AdminDashboard 
+          currentUser={user}
+          onBack={() => setCurrentView('dashboard')}
+          onNavigateToPropertyLookup={() => setCurrentView('inspection')}
+          isDarkMode={isDarkMode}
+          onToggleTheme={handleToggleTheme}
+        />
+      </View>
     );
   }
 
   // Show Assigned Inspections List
   if (currentView === 'assigned') {
     return (
-      <AssignedPropertiesList
-        currentUser={user}
-        onSelectInspection={(inspection) => {
-          setSelectedInspection(inspection);
-          setCurrentView('inspection');
-        }}
-        onBack={() => setCurrentView('dashboard')}
-      />
+      <View style={[styles.rootContainer, !isDarkMode && styles.rootContainerLight]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <AssignedPropertiesList
+          currentUser={user}
+          onSelectInspection={(inspection) => {
+            setSelectedInspection(inspection);
+            setCurrentView('inspection');
+          }}
+          onBack={() => setCurrentView('dashboard')}
+          isDarkMode={isDarkMode}
+        />
+      </View>
     );
   }
 
   // Show Saved Inspections List
   if (currentView === 'saved') {
     return (
-      <SavedInspectionsList
-        currentUser={user}
-        onSelectInspection={(inspection) => {
-          setSelectedInspection(inspection);
-          setCurrentView('inspection');
-        }}
-        onBack={() => {
-          loadRecentInspections(user.id);
-          setCurrentView('dashboard');
-        }}
-        onInspectionDeleted={() => {
-          loadRecentInspections(user.id);
-        }}
-      />
+      <View style={[styles.rootContainer, !isDarkMode && styles.rootContainerLight]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <SavedInspectionsList
+          currentUser={user}
+          onSelectInspection={(inspection) => {
+            setSelectedInspection(inspection);
+            setCurrentView('inspection');
+          }}
+          onBack={() => {
+            loadRecentInspections(user.id);
+            setCurrentView('dashboard');
+          }}
+          onInspectionDeleted={() => {
+            loadRecentInspections(user.id);
+          }}
+          isDarkMode={isDarkMode}
+        />
+      </View>
     );
   }
 
@@ -258,26 +283,30 @@ export default function Index() {
   if (currentView === 'inspection') {
     return (
       <PropertyProvider>
-        <InspectionForm
-          currentUser={user}
-          inspectionId={selectedInspection?.id}
-          initialData={selectedInspection}
-          onCancel={() => {
-            setSelectedInspection(null);
-            loadRecentInspections(user.id);
-            setCurrentView('dashboard');
-          }}
-          onComplete={() => {
-            setSelectedInspection(null);
-            loadRecentInspections(user.id);
-            setCurrentView('dashboard');
-          }}
-          onSave={() => {
-            setSelectedInspection(null);
-            loadRecentInspections(user.id);
-            setCurrentView('dashboard');
-          }}
-        />
+        <View style={[styles.rootContainer, !isDarkMode && styles.rootContainerLight]}>
+          <StatusBar style={isDarkMode ? "light" : "dark"} />
+          <InspectionForm
+            currentUser={user}
+            inspectionId={selectedInspection?.id}
+            initialData={selectedInspection}
+            onCancel={() => {
+              setSelectedInspection(null);
+              loadRecentInspections(user.id);
+              setCurrentView('dashboard');
+            }}
+            onComplete={() => {
+              setSelectedInspection(null);
+              loadRecentInspections(user.id);
+              setCurrentView('dashboard');
+            }}
+            onSave={() => {
+              setSelectedInspection(null);
+              loadRecentInspections(user.id);
+              setCurrentView('dashboard');
+            }}
+            isDarkMode={isDarkMode}
+          />
+        </View>
       </PropertyProvider>
     );
   }
@@ -285,128 +314,133 @@ export default function Index() {
   // Show Settings
   if (currentView === 'settings') {
     return (
-      <Settings
-        currentUser={user}
-        onClose={() => setCurrentView('dashboard')}
-        isDarkMode={isDarkMode}
-        onToggleTheme={setIsDarkMode}
-      />
+      <View style={[styles.rootContainer, !isDarkMode && styles.rootContainerLight]}>
+        <StatusBar style={isDarkMode ? "light" : "dark"} />
+        <Settings
+          currentUser={user}
+          onClose={() => setCurrentView('dashboard')}
+          isDarkMode={isDarkMode}
+          onToggleTheme={handleToggleTheme}
+        />
+      </View>
     );
   }
 
   // Default dashboard view
   return (
-    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} backgroundColor={isDarkMode ? "#111827" : "#ffffff"} />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Pulse Inspections</Text>
-            <Text style={[styles.headerSubtitle, !isDarkMode && styles.headerSubtitleLight]}>{getWelcomeMessage()}</Text>
-            {userRole && (
-              <Text style={[styles.roleText, !isDarkMode && styles.roleTextLight]}>Role: {userRole}</Text>
-            )}
-          </View>
-          <TouchableOpacity onPress={() => setCurrentView('settings')} style={styles.settingsButton}>
-            <SettingsIcon size={24} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Main Content */}
-        <ScrollView style={styles.scrollView}>
-          {/* Top 3 Buttons */}
-          <View style={styles.topButtonsContainer}>
-            <TouchableOpacity
-              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
-              onPress={() => {
-                setSelectedInspection(null);
-                setCurrentView('inspection');
-              }}
-            >
-              <Text style={styles.topButtonText}>New Inspection</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
-              onPress={() => setCurrentView('assigned')}
-            >
-              <Text style={styles.topButtonText}>Assigned Inspections</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
-              onPress={() => setCurrentView('saved')}
-            >
-              <Text style={styles.topButtonText}>Saved Inspections</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Recent Inspections Section */}
-          {recentInspections.length > 0 && (
-            <View style={styles.recentSection}>
-              <View style={styles.recentSectionHeader}>
-                <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Recent Inspections</Text>
-                <TouchableOpacity 
-                  onPress={() => loadRecentInspections(user.id)}
-                  style={styles.refreshButton}
-                >
-                  <RefreshCw size={20} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
-                </TouchableOpacity>
-              </View>
-              {recentInspections.map((inspection) => (
-                <TouchableOpacity
-                  key={inspection.id}
-                  style={[styles.recentInspectionCard, !isDarkMode && styles.recentInspectionCardLight]}
-                  onPress={() => {
-                    setSelectedInspection(inspection);
-                    setCurrentView('inspection');
-                  }}
-                >
-                  <View style={styles.recentInspectionHeader}>
-                    <Text style={[styles.recentInspectionAddress, !isDarkMode && styles.recentInspectionAddressLight]} numberOfLines={1}>
-                      {inspection.address}
-                    </Text>
-                    <View style={[
-                      styles.statusBadge,
-                      inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
-                      ]}>
-                        {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={[styles.recentInspectionDate, !isDarkMode && styles.recentInspectionDateLight]}>
-                    Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+    <View style={[styles.rootBackground, !isDarkMode && styles.rootBackgroundLight]}>
+      <StatusBar style={isDarkMode ? "light" : "dark"} />
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.content}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View>
+              <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Pulse Inspections</Text>
+              <Text style={[styles.headerSubtitle, !isDarkMode && styles.headerSubtitleLight]}>{getWelcomeMessage()}</Text>
+              {userRole && (
+                <Text style={[styles.roleText, !isDarkMode && styles.roleTextLight]}>Role: {userRole}</Text>
+              )}
             </View>
-          )}
-
-          {/* Admin Dashboard Button (if admin) */}
-          {(userRole === 'admin' || userRole === 'system_admin') && (
-            <TouchableOpacity
-              style={[styles.adminButton, !isDarkMode && styles.adminButtonLight]}
-              onPress={() => setCurrentView('admin')}
-            >
-              <Text style={styles.adminButtonText}>Admin Dashboard</Text>
+            <TouchableOpacity onPress={() => setCurrentView('settings')} style={styles.settingsButton}>
+              <SettingsIcon size={24} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
             </TouchableOpacity>
-          )}
+          </View>
 
-          {/* Logout Button */}
-          <TouchableOpacity
-            style={[styles.logoutButton, !isDarkMode && styles.logoutButtonLight]}
-            onPress={handleLogout}
-          >
-            <Text style={styles.logoutButtonText}>Logout</Text>
-          </TouchableOpacity>
-        </ScrollView>
-      </View>
-    </SafeAreaView>
+          {/* Main Content */}
+          <ScrollView style={styles.scrollView}>
+            {/* Top 3 Buttons */}
+            <View style={styles.topButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
+                onPress={() => {
+                  setSelectedInspection(null);
+                  setCurrentView('inspection');
+                }}
+              >
+                <Text style={styles.topButtonText}>New Inspection</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
+                onPress={() => setCurrentView('assigned')}
+              >
+                <Text style={styles.topButtonText}>Assigned Inspections</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.topButton, !isDarkMode && styles.topButtonLight]}
+                onPress={() => setCurrentView('saved')}
+              >
+                <Text style={styles.topButtonText}>Saved Inspections</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Recent Inspections Section */}
+            {recentInspections.length > 0 && (
+              <View style={styles.recentSection}>
+                <View style={styles.recentSectionHeader}>
+                  <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Recent Inspections</Text>
+                  <TouchableOpacity 
+                    onPress={() => loadRecentInspections(user.id)}
+                    style={styles.refreshButton}
+                  >
+                    <RefreshCw size={20} color={isDarkMode ? "#9ca3af" : "#6b7280"} />
+                  </TouchableOpacity>
+                </View>
+                {recentInspections.map((inspection) => (
+                  <TouchableOpacity
+                    key={inspection.id}
+                    style={[styles.recentInspectionCard, !isDarkMode && styles.recentInspectionCardLight]}
+                    onPress={() => {
+                      setSelectedInspection(inspection);
+                      setCurrentView('inspection');
+                    }}
+                  >
+                    <View style={styles.recentInspectionHeader}>
+                      <Text style={[styles.recentInspectionAddress, !isDarkMode && styles.recentInspectionAddressLight]} numberOfLines={1}>
+                        {inspection.address}
+                      </Text>
+                      <View style={[
+                        styles.statusBadge,
+                        inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
+                      ]}>
+                        <Text style={[
+                          styles.statusText,
+                          inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
+                        ]}>
+                          {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[styles.recentInspectionDate, !isDarkMode && styles.recentInspectionDateLight]}>
+                      Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Admin Dashboard Button (if admin) */}
+            {(userRole === 'admin' || userRole === 'system_admin') && (
+              <TouchableOpacity
+                style={[styles.adminButton, !isDarkMode && styles.adminButtonLight]}
+                onPress={() => setCurrentView('admin')}
+              >
+                <Text style={styles.adminButtonText}>Admin Dashboard</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Logout Button */}
+            <TouchableOpacity
+              style={[styles.logoutButton, !isDarkMode && styles.logoutButtonLight]}
+              onPress={handleLogout}
+            >
+              <Text style={styles.logoutButtonText}>Logout</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    </View>
   );
 }
 
@@ -417,16 +451,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  loadingContainerLight: {
+    backgroundColor: '#ffffff',
+  },
   loadingText: {
     color: '#9ca3af',
     marginTop: 16,
     fontSize: 16,
   },
-  container: {
+  rootBackground: {
     flex: 1,
     backgroundColor: '#111827',
   },
-  containerLight: {
+  rootBackgroundLight: {
+    backgroundColor: '#ffffff',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  rootContainer: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  rootContainerLight: {
     backgroundColor: '#ffffff',
   },
   content: {

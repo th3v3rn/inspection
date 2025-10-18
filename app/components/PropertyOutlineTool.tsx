@@ -913,7 +913,7 @@ const PropertyOutlineTool = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       
       {/* Header */}
       <View style={styles.header}>
@@ -1538,17 +1538,17 @@ const PropertyOutlineTool = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#ffffff',
   },
   header: {
     padding: 16,
     paddingTop: Platform.OS === 'android' ? 8 : 16,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: '#e5e7eb',
   },
   headerTitle: {
-    color: '#f3f4f6',
+    color: '#111827',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -1559,29 +1559,31 @@ const styles = StyleSheet.create({
   },
   addressInput: {
     flex: 1,
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
     fontSize: 14,
-    color: '#f3f4f6',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   refreshButton: {
     marginLeft: 8,
-    backgroundColor: '#4b5563',
+    backgroundColor: '#3b82f6',
     padding: 8,
     borderRadius: 8,
   },
   coordsText: {
-    color: '#9ca3af',
+    color: '#6b7280',
     fontSize: 12,
     marginTop: 4,
   },
   typeSelector: {
     padding: 8,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: '#e5e7eb',
   },
   typeButton: {
     marginRight: 8,
@@ -1590,7 +1592,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
   },
   typeButtonActive: {
@@ -1599,7 +1601,7 @@ const styles = StyleSheet.create({
   typeButtonText: {
     marginLeft: 8,
     fontWeight: '500',
-    color: '#f3f4f6',
+    color: '#374151',
   },
   typeButtonTextActive: {
     color: '#ffffff',
@@ -1607,9 +1609,9 @@ const styles = StyleSheet.create({
   measurementsToggle: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     borderBottomWidth: 1,
-    borderBottomColor: '#374151',
+    borderBottomColor: '#e5e7eb',
   },
   measurementsRow: {
     flexDirection: 'row',
@@ -1620,7 +1622,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#6b7280',
+    borderColor: '#9ca3af',
     marginRight: 8,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1630,7 +1632,7 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6',
   },
   measurementsText: {
-    color: '#e5e7eb',
+    color: '#111827',
     fontWeight: '500',
   },
   mapContainer: {
@@ -1646,10 +1648,10 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: '#9ca3af',
+    color: '#6b7280',
   },
   noLocationText: {
-    color: '#9ca3af',
+    color: '#6b7280',
     textAlign: 'center',
   },
   zoomControls: {
@@ -1701,7 +1703,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   structuresList: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     padding: 16,
     maxHeight: 256,
   },
@@ -1709,14 +1711,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 18,
     marginBottom: 8,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   structureCard: {
-    backgroundColor: '#374151',
+    backgroundColor: '#ffffff',
     padding: 12,
     marginBottom: 8,
     borderRadius: 8,
     borderLeftWidth: 4,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   editingRow: {
     flexDirection: 'row',
@@ -1730,7 +1734,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    color: '#f3f4f6',
+    color: '#111827',
   },
   saveEditButton: {
     marginLeft: 8,
@@ -1745,13 +1749,13 @@ const styles = StyleSheet.create({
   },
   cancelEditButton: {
     marginLeft: 4,
-    backgroundColor: '#6b7280',
+    backgroundColor: '#9ca3af',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 4,
   },
   cancelEditButtonText: {
-    color: '#e5e7eb',
+    color: '#ffffff',
     fontWeight: '500',
   },
   structureHeader: {
@@ -1762,7 +1766,7 @@ const styles = StyleSheet.create({
   },
   structureName: {
     fontWeight: 'bold',
-    color: '#f3f4f6',
+    color: '#111827',
     flex: 1,
   },
   structureActions: {
@@ -1774,11 +1778,11 @@ const styles = StyleSheet.create({
   },
   structureInfo: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: '#6b7280',
   },
   emptyText: {
     textAlign: 'center',
-    color: '#6b7280',
+    color: '#9ca3af',
     paddingVertical: 16,
   },
   modalOverlay: {
@@ -1837,9 +1841,9 @@ const styles = StyleSheet.create({
   },
   actionBar: {
     padding: 16,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#f9fafb',
     borderTopWidth: 1,
-    borderTopColor: '#374151',
+    borderTopColor: '#e5e7eb',
   },
   drawingActions: {
     flexDirection: 'row',
@@ -1850,12 +1854,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#6b7280',
+    backgroundColor: '#9ca3af',
     borderRadius: 8,
   },
   cancelDrawingButtonText: {
     textAlign: 'center',
-    color: '#f3f4f6',
+    color: '#ffffff',
     fontWeight: '500',
   },
   completeDrawingButton: {
@@ -1878,11 +1882,11 @@ const styles = StyleSheet.create({
   cancelButton: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#6b7280',
+    backgroundColor: '#9ca3af',
     borderRadius: 8,
   },
   cancelButtonText: {
-    color: '#f3f4f6',
+    color: '#ffffff',
     fontWeight: '500',
   },
   rightActions: {
