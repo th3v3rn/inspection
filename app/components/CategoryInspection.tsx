@@ -1555,343 +1555,349 @@ export default function CategoryInspection({
         <View style={styles.backButton} />
       </View>
 
-      <ScrollView style={styles.content}>
-        {/* Voice Recording Section */}
-        <View style={[styles.card, !isDarkMode && styles.cardLight]}>
-          <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Voice Recording</Text>
-          
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              onPress={handleVoiceRecording}
-              disabled={isCapturing}
-              style={[
-                styles.actionButton,
-                isRecording ? styles.recordingButton : 
-                isCapturing ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
-                [styles.normalButton, !isDarkMode && styles.normalButtonLight]
-              ]}
-            >
-              <Text style={[
-                styles.actionButtonIcon,
-                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
-              ]}>
-                {isRecording ? "⏹️" : "🎤"}
-              </Text>
-              <Text style={[
-                styles.actionButtonText,
-                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
-              ]}>
-                {isRecording ? "Stop" : "Record"}
-              </Text>
-            </TouchableOpacity>
+      <View style={styles.contentContainer}>
+        <ScrollView 
+          style={styles.scrollContent}
+          contentContainerStyle={styles.scrollContentContainer}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Voice Recording Section */}
+          <View style={[styles.card, !isDarkMode && styles.cardLight]}>
+            <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Voice Recording</Text>
+            
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                onPress={handleVoiceRecording}
+                disabled={isCapturing}
+                style={[
+                  styles.actionButton,
+                  isRecording ? styles.recordingButton : 
+                  isCapturing ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
+                  [styles.normalButton, !isDarkMode && styles.normalButtonLight]
+                ]}
+              >
+                <Text style={[
+                  styles.actionButtonIcon,
+                  !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
+                ]}>
+                  {isRecording ? "⏹️" : "🎤"}
+                </Text>
+                <Text style={[
+                  styles.actionButtonText,
+                  !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
+                ]}>
+                  {isRecording ? "Stop" : "Record"}
+                </Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleImageCapture}
-              disabled={isRecording || isCapturing}
-              style={[
-                styles.actionButton,
-                (isCapturing || isRecording) ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
-                [styles.normalButton, !isDarkMode && styles.normalButtonLight]
-              ]}
-            >
-              <Text style={[
-                styles.actionButtonIcon,
-                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
-              ]}>
-                {isCapturing ? "⏳" : "📷"}
-              </Text>
-              <Text style={[
-                styles.actionButtonText,
-                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
-              ]}>
-                {isCapturing ? "Capturing..." : "Capture"}
-              </Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                onPress={handleImageCapture}
+                disabled={isRecording || isCapturing}
+                style={[
+                  styles.actionButton,
+                  (isCapturing || isRecording) ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
+                  [styles.normalButton, !isDarkMode && styles.normalButtonLight]
+                ]}
+              >
+                <Text style={[
+                  styles.actionButtonIcon,
+                  !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
+                ]}>
+                  {isCapturing ? "⏳" : "📷"}
+                </Text>
+                <Text style={[
+                  styles.actionButtonText,
+                  !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
+                ]}>
+                  {isCapturing ? "Capturing..." : "Capture"}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-          {/* Images Section */}
-          {images.length > 0 && (
-            <View style={styles.imagesSection}>
-              <Text style={styles.sectionTitle}>
-                Captured Images ({images.length})
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <View style={styles.imagesRow}>
-                  {images.map((image) => (
-                    <View key={image.id} style={styles.imageContainer}>
-                      <TouchableOpacity
-                        onPress={() => {
-                          if (image.aiDetectedObjects && image.aiDetectedObjects.length > 0) {
-                            const objectsList = image.aiDetectedObjects
-                              .map(obj => `• ${obj.name}${obj.material ? ` (${obj.material})` : ''}${obj.condition ? ` - ${obj.condition}` : ''}`)
-                              .join('\n');
-                            
-                            Alert.alert(
-                              'AI Detection Results',
-                              `${image.aiDescription || 'No description'}\n\nDetected Objects:\n${objectsList}`,
-                              [{ text: 'OK' }]
-                            );
-                          }
-                        }}
-                      >
-                        <Image
-                          source={{ uri: image.supabaseUrl || image.localUri }}
-                          style={styles.image}
-                          resizeMode="cover"
-                        />
-                      </TouchableOpacity>
-                      
-                      {/* Upload Status Badge */}
-                      <View style={[
-                        styles.badge,
-                        styles.uploadBadge,
-                        image.uploadStatus === 'uploaded' ? styles.uploadedBadge :
-                        image.uploadStatus === 'uploading' ? styles.uploadingBadge :
-                        image.uploadStatus === 'failed' ? styles.failedBadge :
-                        styles.pendingBadge
-                      ]}>
-                        <Text style={styles.badgeText}>
-                          {image.uploadStatus === 'uploaded' ? '✓' :
-                           image.uploadStatus === 'uploading' ? '↑' :
-                           image.uploadStatus === 'failed' ? '✗' :
-                           '⏳'}
-                        </Text>
-                      </View>
-
-                      {/* AI Category Badge */}
-                      {image.aiCategory && image.aiCategory !== 'Unknown' && (
-                        <View style={[styles.badge, styles.categoryBadge]}>
-                          <Text style={styles.badgeText}>
-                            {image.aiCategory}
-                          </Text>
-                        </View>
-                      )}
-
-                      {/* AI Objects Count Badge */}
-                      {image.aiDetectedObjects && image.aiDetectedObjects.length > 0 && (
+            {/* Images Section */}
+            {images.length > 0 && (
+              <View style={styles.imagesSection}>
+                <Text style={styles.sectionTitle}>
+                  Captured Images ({images.length})
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.imagesRow}>
+                    {images.map((image) => (
+                      <View key={image.id} style={styles.imageContainer}>
                         <TouchableOpacity
                           onPress={() => {
-                            const objectsList = image.aiDetectedObjects
-                              .map(obj => `• ${obj.name}${obj.material ? ` (${obj.material})` : ''}${obj.condition ? ` - ${obj.condition}` : ''}`)
-                              .join('\n');
-                            
-                            Alert.alert(
-                              'AI Detection Results',
-                              `${image.aiDescription || 'No description'}\n\nDetected Objects:\n${objectsList}`,
-                              [{ text: 'OK' }]
-                            );
+                            if (image.aiDetectedObjects && image.aiDetectedObjects.length > 0) {
+                              const objectsList = image.aiDetectedObjects
+                                .map(obj => `• ${obj.name}${obj.material ? ` (${obj.material})` : ''}${obj.condition ? ` - ${obj.condition}` : ''}`)
+                                .join('\n');
+                              
+                              Alert.alert(
+                                'AI Detection Results',
+                                `${image.aiDescription || 'No description'}\n\nDetected Objects:\n${objectsList}`,
+                                [{ text: 'OK' }]
+                              );
+                            }
                           }}
-                          style={styles.objectsBadge}
                         >
-                          <Text style={styles.objectsBadgeText}>
-                            🔍 {image.aiDetectedObjects.length}
-                          </Text>
+                          <Image
+                            source={{ uri: image.supabaseUrl || image.localUri }}
+                            style={styles.image}
+                            resizeMode="cover"
+                          />
                         </TouchableOpacity>
-                      )}
-
-                      <TouchableOpacity
-                        onPress={() => handleDeleteImage(image.id)}
-                        style={styles.deleteImageButton}
-                      >
-                        <Text style={styles.deleteImageButtonText}>×</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </View>
-              </ScrollView>
-
-              {/* AI Detected Objects Summary */}
-              {images.some(img => img.aiDetectedObjects && img.aiDetectedObjects.length > 0) && (
-                <View style={styles.aiSummary}>
-                  <Text style={styles.aiSummaryTitle}>
-                    🔍 AI Detected Objects:
-                  </Text>
-                  {images
-                    .filter(img => img.aiDetectedObjects && img.aiDetectedObjects.length > 0)
-                    .map((image, idx) => (
-                      <View key={idx} style={styles.aiSummaryItem}>
-                        <Text style={styles.aiSummaryImageLabel}>Image {idx + 1}:</Text>
-                        {image.aiDetectedObjects?.slice(0, 3).map((obj, objIdx) => (
-                          <Text key={objIdx} style={styles.aiSummaryObject}>
-                            • {obj.name}
-                            {obj.material && ` (${obj.material})`}
-                            {obj.condition && ` - ${obj.condition}`}
+                        
+                        {/* Upload Status Badge */}
+                        <View style={[
+                          styles.badge,
+                          styles.uploadBadge,
+                          image.uploadStatus === 'uploaded' ? styles.uploadedBadge :
+                          image.uploadStatus === 'uploading' ? styles.uploadingBadge :
+                          image.uploadStatus === 'failed' ? styles.failedBadge :
+                          styles.pendingBadge
+                        ]}>
+                          <Text style={styles.badgeText}>
+                            {image.uploadStatus === 'uploaded' ? '✓' :
+                             image.uploadStatus === 'uploading' ? '↑' :
+                             image.uploadStatus === 'failed' ? '✗' :
+                             '⏳'}
                           </Text>
-                        ))}
-                        {image.aiDetectedObjects && image.aiDetectedObjects.length > 3 && (
-                          <Text style={styles.aiSummaryMore}>
-                            + {image.aiDetectedObjects.length - 3} more (tap image for details)
-                          </Text>
+                        </View>
+
+                        {/* AI Category Badge */}
+                        {image.aiCategory && image.aiCategory !== 'Unknown' && (
+                          <View style={[styles.badge, styles.categoryBadge]}>
+                            <Text style={styles.badgeText}>
+                              {image.aiCategory}
+                            </Text>
+                          </View>
                         )}
+
+                        {/* AI Objects Count Badge */}
+                        {image.aiDetectedObjects && image.aiDetectedObjects.length > 0 && (
+                          <TouchableOpacity
+                            onPress={() => {
+                              const objectsList = image.aiDetectedObjects
+                                .map(obj => `• ${obj.name}${obj.material ? ` (${obj.material})` : ''}${obj.condition ? ` - ${obj.condition}` : ''}`)
+                                .join('\n');
+                              
+                              Alert.alert(
+                                'AI Detection Results',
+                                `${image.aiDescription || 'No description'}\n\nDetected Objects:\n${objectsList}`,
+                                [{ text: 'OK' }]
+                              );
+                            }}
+                            style={styles.objectsBadge}
+                          >
+                            <Text style={styles.objectsBadgeText}>
+                              🔍 {image.aiDetectedObjects.length}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+
+                        <TouchableOpacity
+                          onPress={() => handleDeleteImage(image.id)}
+                          style={styles.deleteImageButton}
+                        >
+                          <Text style={styles.deleteImageButtonText}>×</Text>
+                        </TouchableOpacity>
                       </View>
                     ))}
-                </View>
-              )}
-            </View>
-          )}
-
-          {/* Debug Info */}
-          {debugInfo.transcript && (
-            <View style={styles.debugInfo}>
-              <Text style={styles.debugTitle}>Transcript:</Text>
-              <Text style={styles.debugText}>{debugInfo.transcript}</Text>
-              {debugInfo.confidence > 0 && (
-                <Text style={styles.debugConfidence}>
-                  Confidence: {Math.round(debugInfo.confidence * 100)}%
-                </Text>
-              )}
-            </View>
-          )}
-
-          {debugInfo.error && (
-            <View style={styles.errorInfo}>
-              <Text style={styles.errorTitle}>Error:</Text>
-              <Text style={styles.errorText}>{debugInfo.error}</Text>
-            </View>
-          )}
-
-          {/* Form Fields */}
-          <View style={styles.formSection}>
-            <Text style={[styles.formTitle, !isDarkMode && styles.formTitleLight]}>
-              {category} Inspection Form
-            </Text>
-
-            {getFormFields(category, formData).map((field) => (
-              <View key={field.id} style={styles.fieldContainer}>
-                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>{field.label}</Text>
-                {field.type === "dropdown" ? (
-                  <View style={[styles.pickerContainer, !isDarkMode && styles.pickerContainerLight]}>
-                    <Picker
-                      selectedValue={formData[field.id as keyof typeof formData] || ""}
-                      onValueChange={(value) => handleInputChange(field.id, value)}
-                      style={[styles.picker, !isDarkMode && styles.pickerLight]}
-                      dropdownIconColor={isDarkMode ? "#9ca3af" : "#6b7280"}
-                    >
-                      {field.options?.map((option) => (
-                        <Picker.Item 
-                          key={option} 
-                          label={option || "Select..."} 
-                          value={option} 
-                          color={isDarkMode ? "#f3f4f6" : "#111827"}
-                        />
-                      ))}
-                    </Picker>
                   </View>
-                ) : field.type === "checkbox" ? (
-                  <TouchableOpacity
-                    onPress={() => {
-                      const currentValue = formData[field.id as keyof typeof formData];
-                      const newValue = !currentValue;
-                      handleInputChange(field.id, newValue);
-                    }}
-                    style={[styles.checkboxContainer, !isDarkMode && styles.checkboxContainerLight]}
-                  >
-                    <View style={[
-                      styles.checkbox,
-                      !isDarkMode && styles.checkboxLight,
-                      formData[field.id as keyof typeof formData] && styles.checkboxChecked,
-                      formData[field.id as keyof typeof formData] && !isDarkMode && styles.checkboxCheckedLight
-                    ]}>
-                      {formData[field.id as keyof typeof formData] && (
-                        <Text style={styles.checkboxCheck}>✓</Text>
-                      )}
-                    </View>
-                    <Text style={[styles.checkboxLabel, !isDarkMode && styles.checkboxLabelLight]}>
-                      {formData[field.id as keyof typeof formData] ? 'Yes' : 'No'}
+                </ScrollView>
+
+                {/* AI Detected Objects Summary */}
+                {images.some(img => img.aiDetectedObjects && img.aiDetectedObjects.length > 0) && (
+                  <View style={styles.aiSummary}>
+                    <Text style={styles.aiSummaryTitle}>
+                      🔍 AI Detected Objects:
                     </Text>
-                  </TouchableOpacity>
-                ) : field.id === "surveyDateTime" ? (
-                  <View style={styles.dateTimeRow}>
+                    {images
+                      .filter(img => img.aiDetectedObjects && img.aiDetectedObjects.length > 0)
+                      .map((image, idx) => (
+                        <View key={idx} style={styles.aiSummaryItem}>
+                          <Text style={styles.aiSummaryImageLabel}>Image {idx + 1}:</Text>
+                          {image.aiDetectedObjects?.slice(0, 3).map((obj, objIdx) => (
+                            <Text key={objIdx} style={styles.aiSummaryObject}>
+                              • {obj.name}
+                              {obj.material && ` (${obj.material})`}
+                              {obj.condition && ` - ${obj.condition}`}
+                            </Text>
+                          ))}
+                          {image.aiDetectedObjects && image.aiDetectedObjects.length > 3 && (
+                            <Text style={styles.aiSummaryMore}>
+                              + {image.aiDetectedObjects.length - 3} more (tap image for details)
+                            </Text>
+                          )}
+                        </View>
+                      ))}
+                  </View>
+                )}
+              </View>
+            )}
+
+            {/* Debug Info */}
+            {debugInfo.transcript && (
+              <View style={styles.debugInfo}>
+                <Text style={styles.debugTitle}>Transcript:</Text>
+                <Text style={styles.debugText}>{debugInfo.transcript}</Text>
+                {debugInfo.confidence > 0 && (
+                  <Text style={styles.debugConfidence}>
+                    Confidence: {Math.round(debugInfo.confidence * 100)}%
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {debugInfo.error && (
+              <View style={styles.errorInfo}>
+                <Text style={styles.errorTitle}>Error:</Text>
+                <Text style={styles.errorText}>{debugInfo.error}</Text>
+              </View>
+            )}
+
+            {/* Form Fields */}
+            <View style={styles.formSection}>
+              <Text style={[styles.formTitle, !isDarkMode && styles.formTitleLight]}>
+                {category} Inspection Form
+              </Text>
+
+              {getFormFields(category, formData).map((field) => (
+                <View key={field.id} style={styles.fieldContainer}>
+                  <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>{field.label}</Text>
+                  {field.type === "dropdown" ? (
+                    <View style={[styles.pickerContainer, !isDarkMode && styles.pickerContainerLight]}>
+                      <Picker
+                        selectedValue={formData[field.id as keyof typeof formData] || ""}
+                        onValueChange={(value) => handleInputChange(field.id, value)}
+                        style={[styles.picker, !isDarkMode && styles.pickerLight]}
+                        dropdownIconColor={isDarkMode ? "#9ca3af" : "#6b7280"}
+                      >
+                        {field.options?.map((option) => (
+                          <Picker.Item 
+                            key={option} 
+                            label={option || "Select..."} 
+                            value={option} 
+                            color={isDarkMode ? "#f3f4f6" : "#111827"}
+                          />
+                        ))}
+                      </Picker>
+                    </View>
+                  ) : field.type === "checkbox" ? (
+                    <TouchableOpacity
+                      onPress={() => {
+                        const currentValue = formData[field.id as keyof typeof formData];
+                        const newValue = !currentValue;
+                        handleInputChange(field.id, newValue);
+                      }}
+                      style={[styles.checkboxContainer, !isDarkMode && styles.checkboxContainerLight]}
+                    >
+                      <View style={[
+                        styles.checkbox,
+                        !isDarkMode && styles.checkboxLight,
+                        formData[field.id as keyof typeof formData] && styles.checkboxChecked,
+                        formData[field.id as keyof typeof formData] && !isDarkMode && styles.checkboxCheckedLight
+                      ]}>
+                        {formData[field.id as keyof typeof formData] && (
+                          <Text style={styles.checkboxCheck}>✓</Text>
+                        )}
+                      </View>
+                      <Text style={[styles.checkboxLabel, !isDarkMode && styles.checkboxLabelLight]}>
+                        {formData[field.id as keyof typeof formData] ? 'Yes' : 'No'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : field.id === "surveyDateTime" ? (
+                    <View style={styles.dateTimeRow}>
+                      <TextInput
+                        style={[styles.input, styles.dateTimeInput, !isDarkMode && styles.inputLight]}
+                        value={formData[field.id as keyof typeof formData] || ""}
+                        onChangeText={(text) => handleInputChange(field.id, text)}
+                        placeholder={field.placeholder}
+                        placeholderTextColor="#9ca3af"
+                      />
+                      <TouchableOpacity
+                        onPress={() => {
+                          const now = new Date();
+                          const dateTimeString = now.toLocaleString('en-US', {
+                            month: '2-digit',
+                            day: '2-digit',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true
+                          });
+                          handleInputChange(field.id, dateTimeString);
+                        }}
+                        style={[styles.nowButton, !isDarkMode && styles.nowButtonLight]}
+                      >
+                        <Text style={[styles.nowButtonText, !isDarkMode && styles.nowButtonTextLight]}>Now</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
                     <TextInput
-                      style={[styles.input, styles.dateTimeInput, !isDarkMode && styles.inputLight]}
-                      value={formData[field.id as keyof typeof formData] || ""}
+                      style={[styles.input, !isDarkMode && styles.inputLight]}
+                      value={String(formData[field.id as keyof typeof formData] || "")}
                       onChangeText={(text) => handleInputChange(field.id, text)}
                       placeholder={field.placeholder}
                       placeholderTextColor="#9ca3af"
+                      multiline
+                      numberOfLines={3}
+                      keyboardType={field.keyboardType || "default"}
                     />
-                    <TouchableOpacity
-                      onPress={() => {
-                        const now = new Date();
-                        const dateTimeString = now.toLocaleString('en-US', {
-                          month: '2-digit',
-                          day: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          hour12: true
-                        });
-                        handleInputChange(field.id, dateTimeString);
-                      }}
-                      style={[styles.nowButton, !isDarkMode && styles.nowButtonLight]}
-                    >
-                      <Text style={[styles.nowButtonText, !isDarkMode && styles.nowButtonTextLight]}>Now</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TextInput
-                    style={[styles.input, !isDarkMode && styles.inputLight]}
-                    value={String(formData[field.id as keyof typeof formData] || "")}
-                    onChangeText={(text) => handleInputChange(field.id, text)}
-                    placeholder={field.placeholder}
-                    placeholderTextColor="#9ca3af"
-                    multiline
-                    numberOfLines={3}
-                    keyboardType={field.keyboardType || "default"}
-                  />
-                )}
-              </View>
-            ))}
+                  )}
+                </View>
+              ))}
+            </View>
           </View>
+        </ScrollView>
 
-          {/* Navigation Buttons */}
-          <View style={styles.navigationButtons}>
-            <TouchableOpacity
-              onPress={handlePrevious}
-              disabled={isFirstCategory}
-              style={[
-                styles.navButton,
-                !isDarkMode && styles.navButtonLight,
-                styles.navButtonLeft,
-                isFirstCategory && styles.navButtonDisabled
-              ]}
-            >
-              <Text style={[
-                styles.navButtonText,
-                !isDarkMode && styles.navButtonTextLight,
-                isFirstCategory && styles.navButtonTextDisabled
-              ]}>
-                ← Previous
-              </Text>
-            </TouchableOpacity>
+        {/* Fixed Navigation Buttons at Bottom */}
+        <View style={[styles.fixedBottomNav, !isDarkMode && styles.fixedBottomNavLight]}>
+          <TouchableOpacity
+            onPress={handlePrevious}
+            disabled={isFirstCategory}
+            style={[
+              styles.navButton,
+              !isDarkMode && styles.navButtonLight,
+              styles.navButtonLeft,
+              isFirstCategory && styles.navButtonDisabled
+            ]}
+          >
+            <Text style={[
+              styles.navButtonText,
+              !isDarkMode && styles.navButtonTextLight,
+              isFirstCategory && styles.navButtonTextDisabled
+            ]}>
+              ← Previous
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleBackToCategories}
-              style={[styles.completeButton, !isDarkMode && styles.completeButtonLight]}
-            >
-              <Text style={[styles.completeButtonText, !isDarkMode && styles.completeButtonTextLight]}>Complete</Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleBackToCategories}
+            style={[styles.completeButton, !isDarkMode && styles.completeButtonLight]}
+          >
+            <Text style={[styles.completeButtonText, !isDarkMode && styles.completeButtonTextLight]}>Complete</Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleNext}
-              disabled={isLastCategory}
-              style={[
-                styles.navButton,
-                !isDarkMode && styles.navButtonLight,
-                styles.navButtonRight,
-                isLastCategory && styles.navButtonDisabled
-              ]}
-            >
-              <Text style={[
-                styles.navButtonText,
-                !isDarkMode && styles.navButtonTextLight,
-                isLastCategory && styles.navButtonTextDisabled
-              ]}>
-                Next →
-              </Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={handleNext}
+            disabled={isLastCategory}
+            style={[
+              styles.navButton,
+              !isDarkMode && styles.navButtonLight,
+              styles.navButtonRight,
+              isLastCategory && styles.navButtonDisabled
+            ]}
+          >
+            <Text style={[
+              styles.navButtonText,
+              !isDarkMode && styles.navButtonTextLight,
+              isLastCategory && styles.navButtonTextDisabled
+            ]}>
+              Next →
+            </Text>
+          </TouchableOpacity>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -1930,9 +1936,15 @@ const styles = StyleSheet.create({
   headerTitleLight: {
     color: '#111827',
   },
-  content: {
+  contentContainer: {
     flex: 1,
+  },
+  scrollContent: {
+    flex: 1,
+  },
+  scrollContentContainer: {
     padding: 16,
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: '#1f2937',
@@ -2288,12 +2300,18 @@ const styles = StyleSheet.create({
   nowButtonTextLight: {
     color: '#374151',
   },
-  navigationButtons: {
+  fixedBottomNav: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 32,
+    padding: 16,
+    backgroundColor: '#1f2937',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  fixedBottomNavLight: {
+    backgroundColor: '#ffffff',
+    borderTopColor: '#e5e7eb',
   },
   navButton: {
     flex: 1,

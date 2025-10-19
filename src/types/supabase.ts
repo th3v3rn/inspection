@@ -353,14 +353,14 @@ export type Database = {
           {
             foreignKeyName: "property_outlines_inspection_id_fkey"
             columns: ["inspection_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "assignments_with_inspections"
             referencedColumns: ["inspection_id_actual"]
           },
           {
             foreignKeyName: "property_outlines_inspection_id_fkey"
             columns: ["inspection_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "inspections"
             referencedColumns: ["id"]
           },

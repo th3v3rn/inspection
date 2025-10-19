@@ -630,7 +630,7 @@ const PropertyOutlineTool = ({
       const { data, error } = await supabase
         .from("property_outlines")
         .select("*")
-        .eq("property_id", propId)
+        .eq("inspection_id", propId)
         .single();
 
       if (error && error.code !== "PGRST116") {
@@ -985,13 +985,13 @@ const PropertyOutlineTool = ({
       const { data: existing, error: checkError } = await supabase
         .from("property_outlines")
         .select("id")
-        .eq("property_id", propertyId)
+        .eq("inspection_id", propertyId)
         .maybeSingle();
 
       console.log("Existing check result:", { existing, checkError });
 
       const outlineData = {
-        property_id: propertyId,
+        inspection_id: propertyId,
         structures: structures,
         satellite_image_url: satelliteImageUrl,
         latitude: currentLat,
@@ -1009,7 +1009,7 @@ const PropertyOutlineTool = ({
         result = await supabase
           .from("property_outlines")
           .update(outlineData)
-          .eq("property_id", propertyId);
+          .eq("inspection_id", propertyId);
       } else {
         // Insert new outlines
         console.log("Inserting new outlines...");
@@ -1030,9 +1030,10 @@ const PropertyOutlineTool = ({
       console.log("Save successful!");
       Alert.alert("Success", "Property outlines saved successfully!");
 
-      // Call the onSave callback if provided
-      const exportedImage = await exportImage();
-      onSave(structures, exportedImage);
+      // Call the onComplete callback to navigate back
+      if (onCancel) {
+        onCancel();
+      }
     } catch (error) {
       console.error("Error saving outlines:", error);
       Alert.alert("Error", `Failed to save outlines: ${error}`);

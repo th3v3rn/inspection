@@ -899,119 +899,125 @@ export default function InspectionForm({
 
   const renderCategorySelection = () => {
     return (
-      <View style={[styles.card, !isDarkMode && styles.cardLight]}>
-        <View style={styles.categoryHeader}>
-          <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Inspection Categories</Text>
-          <TouchableOpacity 
-            onPress={handleSaveInspection}
-            disabled={isSaving}
-            style={styles.saveButton}
+      <View style={[styles.categorySelectionContainer, !isDarkMode && styles.categorySelectionContainerLight]}>
+        <View style={[styles.card, styles.categoryCard, !isDarkMode && styles.cardLight]}>
+          <View style={styles.categoryHeader}>
+            <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Inspection Categories</Text>
+            <TouchableOpacity 
+              onPress={handleSaveInspection}
+              disabled={isSaving}
+              style={styles.saveButton}
+            >
+              {isSaving ? (
+                <ActivityIndicator size="small" color="#9ca3af" />
+              ) : (
+                <Save size={20} color="#9ca3af" />
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* Inspection Complete Toggle */}
+          <View style={[styles.completeToggleContainer, !isDarkMode && styles.completeToggleContainerLight]}>
+            <Text style={[styles.completeToggleText, !isDarkMode && styles.completeToggleTextLight]}>Inspection Complete?</Text>
+            <TouchableOpacity
+              onPress={() => setIsInspectionComplete(!isInspectionComplete)}
+              style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
+            >
+              <View style={[styles.toggleThumb, isInspectionComplete && styles.toggleThumbActive]} />
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
+
+          <ScrollView 
+            style={styles.categoriesScroll}
+            contentContainerStyle={styles.categoriesScrollContent}
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled={true}
           >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#9ca3af" />
-            ) : (
-              <Save size={20} color="#9ca3af" />
-            )}
-          </TouchableOpacity>
-        </View>
+            {categories.map((category, index) => {
+              const categoryKey = category.toLowerCase().replace(/ /g, '_');
+              const isCompleted = formData.categories?.[categoryKey] && 
+                                 Object.keys(formData.categories[categoryKey]).length > 0;
+              const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
 
-        {/* Inspection Complete Toggle */}
-        <View style={[styles.completeToggleContainer, !isDarkMode && styles.completeToggleContainerLight]}>
-          <Text style={[styles.completeToggleText, !isDarkMode && styles.completeToggleTextLight]}>Inspection Complete?</Text>
-          <TouchableOpacity
-            onPress={() => setIsInspectionComplete(!isInspectionComplete)}
-            style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
-          >
-            <View style={[styles.toggleThumb, isInspectionComplete && styles.toggleThumbActive]} />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
-
-        <ScrollView 
-          style={styles.categoriesScroll}
-          contentContainerStyle={styles.categoriesScrollContent}
-          showsVerticalScrollIndicator={true}
-        >
-          {categories.map((category, index) => {
-            const categoryKey = category.toLowerCase().replace(/ /g, '_');
-            const isCompleted = formData.categories?.[categoryKey] && 
-                               Object.keys(formData.categories[categoryKey]).length > 0;
-            const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
-
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[
-                  styles.categoryItem, 
-                  !isDarkMode && styles.categoryItemLight,
-                  isCompleted && styles.categoryItemCompleted,
-                  isCompleted && !isDarkMode && styles.categoryItemCompletedLight
-                ]}
-                onPress={() => handleCategorySelect(category)}
-              >
-                <View style={styles.categoryItemContent}>
-                  <Text style={[
-                    styles.categoryItemText, 
-                    !isDarkMode && styles.categoryItemTextLight,
-                    isCompleted && styles.categoryItemTextCompleted,
-                    isCompleted && !isDarkMode && styles.categoryItemTextCompletedLight
-                  ]}>
-                    {category}
-                  </Text>
-                  <View style={styles.categoryItemRight}>
-                    {isCompleted && (
-                      <Text style={styles.completedBadge}>Completed</Text>
-                    )}
-                    <ChevronRight
-                      size={16}
-                      color={isCompleted ? "#10b981" : "#9ca3af"}
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.categoryItem, 
+                    !isDarkMode && styles.categoryItemLight,
+                    isCompleted && styles.categoryItemCompleted,
+                    isCompleted && !isDarkMode && styles.categoryItemCompletedLight
+                  ]}
+                  onPress={() => handleCategorySelect(category)}
+                >
+                  <View style={styles.categoryItemContent}>
+                    <Text style={[
+                      styles.categoryItemText, 
+                      !isDarkMode && styles.categoryItemTextLight,
+                      isCompleted && styles.categoryItemTextCompleted,
+                      isCompleted && !isDarkMode && styles.categoryItemTextCompletedLight
+                    ]}>
+                      {category}
+                    </Text>
+                    <View style={styles.categoryItemRight}>
+                      {isCompleted && (
+                        <Text style={styles.completedBadge}>Completed</Text>
+                      )}
+                      <ChevronRight
+                        size={16}
+                        color={isCompleted ? "#10b981" : "#9ca3af"}
+                      />
+                    </View>
+                  </View>
+                  
+                  {/* Visual Fill Indicator */}
+                  <View style={styles.progressBarContainer}>
+                    <View 
+                      style={[
+                        styles.progressBarFill, 
+                        { 
+                          width: `${completionPercentage}%`,
+                          backgroundColor: completionPercentage === 100 ? '#10b981' : 
+                                          completionPercentage > 50 ? '#3b82f6' : 
+                                          completionPercentage > 0 ? '#f59e0b' : '#4b5563'
+                        }
+                      ]} 
                     />
                   </View>
-                </View>
-                
-                {/* Visual Fill Indicator */}
-                <View style={styles.progressBarContainer}>
-                  <View 
-                    style={[
-                      styles.progressBarFill, 
-                      { 
-                        width: `${completionPercentage}%`,
-                        backgroundColor: completionPercentage === 100 ? '#10b981' : 
-                                        completionPercentage > 50 ? '#3b82f6' : 
-                                        completionPercentage > 0 ? '#f59e0b' : '#4b5563'
-                      }
-                    ]} 
-                  />
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
 
-        {/* Property Outline Tool Button */}
-        <TouchableOpacity
-          style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
-          onPress={() => setShowPropertyOutlineTool(true)}
-        >
-          <Map size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
-          <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Property Outline Tool</Text>
-        </TouchableOpacity>
+          {/* Fixed Bottom Buttons Container */}
+          <View style={styles.bottomButtonsContainer}>
+            {/* Property Outline Tool Button */}
+            <TouchableOpacity
+              style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
+              onPress={() => setShowPropertyOutlineTool(true)}
+            >
+              <Map size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
+              <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Property Outline Tool</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
-          onPress={handleGetDirections}
-        >
-          <Navigation size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
-          <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Get Directions</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
+              onPress={handleGetDirections}
+            >
+              <Navigation size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
+              <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Get Directions</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleClose}
-        >
-          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>Back to Dashboard</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={handleClose}
+            >
+              <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>Back to Dashboard</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     );
   };
@@ -1031,6 +1037,7 @@ export default function InspectionForm({
       ) : showPropertyOutlineTool ? (
         <PropertyOutlineTool
           address={formData.address}
+          propertyId={currentInspectionId}
           onComplete={handlePropertyOutlineComplete}
           onCancel={() => setShowPropertyOutlineTool(false)}
         />
@@ -1086,10 +1093,21 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 12,
   },
+  categorySelectionContainer: {
+    flex: 1,
+    backgroundColor: '#111827',
+  },
+  categorySelectionContainerLight: {
+    backgroundColor: '#ffffff',
+  },
   card: {
     backgroundColor: '#1f2937',
     borderRadius: 12,
     padding: 20,
+    margin: 16,
+  },
+  categoryCard: {
+    flex: 1,
     margin: 16,
   },
   cardLight: {
@@ -1302,7 +1320,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   categoriesScroll: {
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 1,
   },
   categoriesScrollContent: {
     paddingBottom: 16,
@@ -1370,6 +1389,12 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     borderRadius: 2,
+  },
+  bottomButtonsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
   },
   secondaryButton: {
     flexDirection: 'row',
