@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Image, SafeAreaView, StatusBar, useColorScheme } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -47,47 +51,53 @@ export default function LoginScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.logoContainer}>
-        <Image 
-          source={require('../../assets/images/icon.png')} 
-          style={styles.logo}
-          resizeMode="contain"
-        />
-        <Text style={styles.title}>Pulse Inspections</Text>
-      </View>
-      
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#1a1a1a" : "#ffffff"} 
+      />
+      <View style={styles.content}>
+        <View style={styles.logoContainer}>
+          <Image 
+            source={require('../../assets/images/icon.png')} 
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={[styles.title, !isDarkMode && styles.titleLight]}>Pulse Inspections</Text>
+        </View>
         
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          <Text style={styles.buttonText}>
-            {loading ? 'Logging in...' : 'Login'}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.formContainer}>
+          <TextInput
+            style={[styles.input, !isDarkMode && styles.inputLight]}
+            placeholder="Email"
+            placeholderTextColor={isDarkMode ? "#999" : "#6b7280"}
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+          
+          <TextInput
+            style={[styles.input, !isDarkMode && styles.inputLight]}
+            placeholder="Password"
+            placeholderTextColor={isDarkMode ? "#999" : "#6b7280"}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          
+          <TouchableOpacity 
+            style={[styles.button, loading && styles.buttonDisabled]} 
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <Text style={styles.buttonText}>
+              {loading ? 'Logging in...' : 'Login'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -95,6 +105,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
+  },
+  content: {
+    flex: 1,
     justifyContent: 'center',
   },
   logoContainer: {
@@ -112,6 +128,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 8,
   },
+  titleLight: {
+    color: '#111827',
+  },
   subtitle: {
     fontSize: 18,
     color: '#999',
@@ -128,6 +147,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     borderWidth: 1,
     borderColor: '#3a3a3a',
+  },
+  inputLight: {
+    backgroundColor: '#f9fafb',
+    color: '#111827',
+    borderColor: '#e5e7eb',
   },
   button: {
     backgroundColor: '#007AFF',

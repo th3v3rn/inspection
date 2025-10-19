@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform, Alert, useColorScheme } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 interface SavedInspectionsListProps {
@@ -7,11 +7,13 @@ interface SavedInspectionsListProps {
   onSelectInspection: (inspection: any) => void;
   onBack: () => void;
   onInspectionDeleted?: () => void;
-  isDarkMode?: boolean;
-  onToggleTheme?: (isDark: boolean) => void;
 }
 
-export default function SavedInspectionsList({ currentUser, onSelectInspection, onBack, onInspectionDeleted, isDarkMode = true, onToggleTheme }: SavedInspectionsListProps) {
+export default function SavedInspectionsList({ currentUser, onSelectInspection, onBack, onInspectionDeleted }: SavedInspectionsListProps) {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -76,140 +78,167 @@ export default function SavedInspectionsList({ currentUser, onSelectInspection, 
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
+        <Text style={[styles.loadingText, !isDarkMode && styles.loadingTextLight]}>Loading inspections...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Saved Inspections</Text>
-          </View>
-        </View>
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
+      
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Saved Inspections</Text>
+        <View style={styles.backButton} />
+      </View>
 
-        {/* Inspections List */}
-        <ScrollView style={styles.scrollView}>
-          {inspections.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No saved inspections yet</Text>
-            </View>
-          ) : (
-            inspections.map((inspection) => (
-              <View key={inspection.id} style={styles.inspectionCard}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={[styles.loadingText, !isDarkMode && styles.loadingTextLight]}>Loading inspections...</Text>
+        </View>
+      ) : inspections.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={[styles.emptyText, !isDarkMode && styles.emptyTextLight]}>No saved inspections</Text>
+        </View>
+      ) : (
+        <ScrollView style={styles.content}>
+          {inspections.map((inspection) => (
+            <View key={inspection.id} style={[styles.card, !isDarkMode && styles.cardLight]}>
+              <TouchableOpacity
+                style={styles.inspectionContent}
+                onPress={() => onSelectInspection(inspection)}
+              >
+                <View style={styles.inspectionHeader}>
+                  <Text style={styles.inspectionAddress} numberOfLines={1}>
+                    {inspection.address}
+                  </Text>
+                  <View style={[
+                    styles.statusBadge,
+                    inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
+                  ]}>
+                    <Text style={[
+                      styles.statusText,
+                      inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
+                    ]}>
+                      {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.inspectionDate}>
+                  Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
+                </Text>
+              </TouchableOpacity>
+              
+              {/* Action Buttons */}
+              <View style={styles.actionButtons}>
                 <TouchableOpacity
-                  style={styles.inspectionContent}
+                  style={styles.editButton}
                   onPress={() => onSelectInspection(inspection)}
                 >
-                  <View style={styles.inspectionHeader}>
-                    <Text style={styles.inspectionAddress} numberOfLines={1}>
-                      {inspection.address}
-                    </Text>
-                    <View style={[
-                      styles.statusBadge,
-                      inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
-                      ]}>
-                        {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.inspectionDate}>
-                    Last updated: {new Date(inspection.updated_at).toLocaleDateString()}
-                  </Text>
+                  <Text style={styles.editButtonText}>Edit</Text>
                 </TouchableOpacity>
                 
-                {/* Action Buttons */}
-                <View style={styles.actionButtons}>
-                  <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={() => onSelectInspection(inspection)}
-                  >
-                    <Text style={styles.editButtonText}>Edit</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.exportButton}
-                    onPress={() => handleExport(inspection)}
-                  >
-                    <Text style={styles.exportButtonText}>Export</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.deleteButton}
-                    onPress={() => handleDelete(inspection.id)}
-                  >
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                  style={styles.exportButton}
+                  onPress={() => handleExport(inspection)}
+                >
+                  <Text style={styles.exportButtonText}>Export</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => handleDelete(inspection.id)}
+                >
+                  <Text style={styles.deleteButtonText}>Delete</Text>
+                </TouchableOpacity>
               </View>
-            ))
-          )}
+            </View>
+          ))}
         </ScrollView>
-      </View>
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: '#111827',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   container: {
     flex: 1,
     backgroundColor: '#111827',
+  },
+  containerLight: {
+    backgroundColor: '#ffffff',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
+  },
+  backButton: {
+    width: 60,
+  },
+  backButtonText: {
+    color: '#3b82f6',
+    fontSize: 16,
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#f3f4f6',
+  },
+  headerTitleLight: {
+    color: '#111827',
   },
   content: {
     flex: 1,
     padding: 16,
   },
-  header: {
-    marginBottom: 24,
+  card: {
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
-  backButton: {
-    marginBottom: 12,
+  cardLight: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
-  backButtonText: {
-    color: '#3b82f6',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#f3f4f6',
-  },
-  scrollView: {
+  loadingContainer: {
     flex: 1,
-  },
-  emptyState: {
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 48,
+    alignItems: 'center',
   },
-  emptyStateText: {
+  loadingText: {
+    color: '#9ca3af',
+    marginTop: 12,
+  },
+  loadingTextLight: {
+    color: '#6b7280',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
     color: '#9ca3af',
     fontSize: 16,
   },
-  inspectionCard: {
-    backgroundColor: '#1f2937',
-    borderRadius: 8,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#374151',
-    overflow: 'hidden',
+  emptyTextLight: {
+    color: '#6b7280',
   },
   inspectionContent: {
     padding: 16,

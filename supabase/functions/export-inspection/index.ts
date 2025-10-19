@@ -92,6 +92,78 @@ Deno.serve(async (req) => {
       .eq('id', inspection.inspector_id)
       .single();
 
+    // Fetch property outlines using inspection_id
+    console.log('Fetching property outlines...');
+    let propertyOutlines = null;
+    const { data: outlineData } = await supabase
+      .from('property_outlines')
+      .select('*')
+      .eq('inspection_id', inspectionId)
+      .single();
+    
+    if (outlineData) {
+      // Calculate measurements for each structure
+      const calculateDistance = (p1: any, p2: any): number => {
+        const pixelDistance = Math.sqrt(
+          Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)
+        );
+        // Assuming scale from zoom level 20: ~1 pixel = 0.3 feet
+        const scale = Math.pow(2, (outlineData.zoom_level || 20) - 18) * 0.83;
+        return pixelDistance / scale;
+      };
+
+      const calculatePerimeter = (points: any[]): number => {
+        let perimeter = 0;
+        for (let i = 0; i < points.length; i++) {
+          const nextIndex = (i + 1) % points.length;
+          perimeter += calculateDistance(points[i], points[nextIndex]);
+        }
+        return perimeter;
+      };
+
+      const calculateArea = (points: any[]): number => {
+        if (points.length < 3) return 0;
+        
+        // Shoelace formula for polygon area
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+          const j = (i + 1) % points.length;
+          area += points[i].x * points[j].y;
+          area -= points[j].x * points[i].y;
+        }
+        area = Math.abs(area) / 2;
+        
+        // Convert from square pixels to square feet
+        const scale = Math.pow(2, (outlineData.zoom_level || 20) - 18) * 0.83;
+        return area / (scale * scale);
+      };
+
+      // Process structures with measurements
+      const structuresWithMeasurements = outlineData.structures?.map((structure: any) => ({
+        id: structure.id,
+        type: structure.type,
+        label: structure.label,
+        color: structure.color,
+        visible: structure.visible,
+        points: structure.points,
+        measurements: {
+          perimeter: calculatePerimeter(structure.points).toFixed(2),
+          area: calculateArea(structure.points).toFixed(2),
+          unit: 'feet',
+          areaUnit: 'square feet'
+        }
+      })) || [];
+
+      propertyOutlines = {
+        structures: structuresWithMeasurements,
+        satelliteImageUrl: outlineData.satellite_image_url,
+        latitude: outlineData.latitude,
+        longitude: outlineData.longitude,
+        zoomLevel: outlineData.zoom_level,
+        updatedAt: outlineData.updated_at
+      };
+    }
+
     // Extract latitude and longitude from property_api_data
     let latitude = null;
     let longitude = null;
@@ -119,7 +191,8 @@ Deno.serve(async (req) => {
       },
       categories: inspection.categories,
       propertyApiData: inspection.property_api_data || null,
-      propertyOutline: inspection.property_outline || null,
+      propertyMetadata: inspection.property_metadata || null,
+      propertyOutlines: propertyOutlines,
       measurements: inspection.measurements || {},
       images: images?.map(img => ({
         id: img.id,

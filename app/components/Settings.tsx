@@ -7,10 +7,9 @@ interface SettingsProps {
   currentUser: any;
   onClose: () => void;
   isDarkMode: boolean;
-  onToggleTheme: (isDark: boolean) => void;
 }
 
-export default function Settings({ currentUser, onClose, isDarkMode, onToggleTheme }: SettingsProps) {
+export default function Settings({ currentUser, onClose, isDarkMode }: SettingsProps) {
   const [resettingPassword, setResettingPassword] = useState(false);
   const [fullName, setFullName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -168,17 +167,16 @@ export default function Settings({ currentUser, onClose, isDarkMode, onToggleThe
               <View style={[styles.settingCard, !isDarkMode && styles.settingCardLight]}>
                 <View style={styles.settingRow}>
                   <View style={styles.settingInfo}>
-                    <Text style={[styles.settingLabel, !isDarkMode && styles.settingLabelLight]}>Dark Mode</Text>
+                    <Text style={[styles.settingLabel, !isDarkMode && styles.settingLabelLight]}>Theme</Text>
                     <Text style={[styles.settingDescription, !isDarkMode && styles.settingDescriptionLight]}>
-                      Use dark theme throughout the app
+                      Automatically follows your device's system theme settings
                     </Text>
                   </View>
-                  <Switch
-                    value={isDarkMode}
-                    onValueChange={handleThemeToggle}
-                    trackColor={{ false: '#d1d5db', true: '#3b82f6' }}
-                    thumbColor={isDarkMode ? '#ffffff' : '#f3f4f6'}
-                  />
+                  <View style={[styles.themeBadge, isDarkMode ? styles.themeBadgeDark : styles.themeBadgeLight]}>
+                    <Text style={[styles.themeBadgeText, isDarkMode ? styles.themeBadgeTextDark : styles.themeBadgeTextLight]}>
+                      {isDarkMode ? 'Dark' : 'Light'}
+                    </Text>
+                  </View>
                 </View>
               </View>
             </View>
@@ -371,6 +369,30 @@ const styles = StyleSheet.create({
   },
   settingDescriptionLight: {
     color: '#6b7280',
+  },
+  themeBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  themeBadgeDark: {
+    backgroundColor: '#1f2937',
+    borderColor: '#374151',
+  },
+  themeBadgeLight: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
+  themeBadgeText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  themeBadgeTextDark: {
+    color: '#f3f4f6',
+  },
+  themeBadgeTextLight: {
+    color: '#111827',
   },
   actionButton: {
     backgroundColor: '#3b82f6',

@@ -164,6 +164,7 @@ export type Database = {
           measurements: Json | null
           property_api_data: Json | null
           property_id: string | null
+          property_metadata: Json | null
           property_outline: Json | null
           status: string
           sync_status: string
@@ -182,6 +183,7 @@ export type Database = {
           measurements?: Json | null
           property_api_data?: Json | null
           property_id?: string | null
+          property_metadata?: Json | null
           property_outline?: Json | null
           status?: string
           sync_status?: string
@@ -200,6 +202,7 @@ export type Database = {
           measurements?: Json | null
           property_api_data?: Json | null
           property_id?: string | null
+          property_metadata?: Json | null
           property_outline?: Json | null
           status?: string
           sync_status?: string
@@ -316,9 +319,9 @@ export type Database = {
         Row: {
           created_at: string | null
           id: string
+          inspection_id: string
           latitude: number | null
           longitude: number | null
-          property_id: string
           satellite_image_url: string | null
           structures: Json
           updated_at: string | null
@@ -327,9 +330,9 @@ export type Database = {
         Insert: {
           created_at?: string | null
           id?: string
+          inspection_id: string
           latitude?: number | null
           longitude?: number | null
-          property_id: string
           satellite_image_url?: string | null
           structures?: Json
           updated_at?: string | null
@@ -338,9 +341,9 @@ export type Database = {
         Update: {
           created_at?: string | null
           id?: string
+          inspection_id?: string
           latitude?: number | null
           longitude?: number | null
-          property_id?: string
           satellite_image_url?: string | null
           structures?: Json
           updated_at?: string | null
@@ -348,10 +351,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "property_outlines_property_id_fkey"
-            columns: ["property_id"]
+            foreignKeyName: "property_outlines_inspection_id_fkey"
+            columns: ["inspection_id"]
             isOneToOne: false
-            referencedRelation: "properties"
+            referencedRelation: "assignments_with_inspections"
+            referencedColumns: ["inspection_id_actual"]
+          },
+          {
+            foreignKeyName: "property_outlines_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
             referencedColumns: ["id"]
           },
         ]

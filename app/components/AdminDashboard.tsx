@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform, Alert, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, TextInput, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Alert, useColorScheme } from 'react-native';
 import { supabase } from '../../lib/supabase';
-import { ChevronDown, UserPlus, Settings as SettingsIcon } from 'lucide-react-native';
-import Settings from './Settings';
 
 interface AdminDashboardProps {
   currentUser: any;
   onBack: () => void;
   onNavigateToPropertyLookup?: () => void;
-  isDarkMode?: boolean;
-  onToggleTheme?: (isDark: boolean) => void;
 }
 
-export default function AdminDashboard({ currentUser, onBack, onNavigateToPropertyLookup, isDarkMode = true, onToggleTheme }: AdminDashboardProps) {
+export default function AdminDashboard({ currentUser, onBack }: AdminDashboardProps) {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const [inspectors, setInspectors] = useState<any[]>([]);
   const [inspections, setInspections] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,190 +129,117 @@ export default function AdminDashboard({ currentUser, onBack, onNavigateToProper
         currentUser={currentUser}
         onClose={() => setShowSettings(false)}
         isDarkMode={isDarkMode}
-        onToggleTheme={onToggleTheme || (() => {})}
       />
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <View>
-            <TouchableOpacity onPress={onBack} style={styles.backButton}>
-              <Text style={styles.backButtonText}>← Back</Text>
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Admin Dashboard</Text>
-          </View>
-          <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.settingsButton}>
-            <SettingsIcon size={24} color="#9ca3af" />
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
+      
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Admin Dashboard</Text>
+        <View style={styles.backButton} />
+      </View>
+
+      <ScrollView style={styles.scrollView}>
+        {/* Invite Inspector Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Invite Inspector</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Inspector Name"
+            placeholderTextColor="#9ca3af"
+            value={inviteName}
+            onChangeText={setInviteName}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Inspector Email"
+            placeholderTextColor="#9ca3af"
+            value={inviteEmail}
+            onChangeText={setInviteEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <TouchableOpacity
+            style={[styles.primaryButton, sending && styles.buttonDisabled]}
+            onPress={handleSendInvite}
+            disabled={sending}
+          >
+            <Text style={styles.primaryButtonText}>
+              {sending ? 'Sending...' : 'Send Invitation'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.scrollView}>
-          {/* Invite Inspector Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Invite Inspector</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Inspector Name"
-              placeholderTextColor="#9ca3af"
-              value={inviteName}
-              onChangeText={setInviteName}
-            />
-            <TextInput
-              style={styles.input}
-              placeholder="Inspector Email"
-              placeholderTextColor="#9ca3af"
-              value={inviteEmail}
-              onChangeText={setInviteEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <TouchableOpacity
-              style={[styles.primaryButton, sending && styles.buttonDisabled]}
-              onPress={handleSendInvite}
-              disabled={sending}
-            >
-              <Text style={styles.primaryButtonText}>
-                {sending ? 'Sending...' : 'Send Invitation'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Inspectors List */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Inspectors ({inspectors.length})</Text>
-            {inspectors.length === 0 ? (
-              <Text style={styles.emptyText}>No inspectors yet</Text>
-            ) : (
-              inspectors.map((inspector) => (
-                <View key={inspector.id} style={styles.card}>
-                  <Text style={styles.cardTitle}>{inspector.full_name || inspector.email}</Text>
-                  <Text style={styles.cardSubtitle}>{inspector.email}</Text>
-                </View>
-              ))
-            )}
-          </View>
-
-          {/* Inspections List */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Inspections ({inspections.length})</Text>
-            {inspections.length === 0 ? (
-              <Text style={styles.emptyText}>No inspections yet</Text>
-            ) : (
-              inspections.map((inspection) => (
-                <View key={inspection.id} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {inspection.address}
-                    </Text>
-                    <View style={[
-                      styles.statusBadge,
-                      inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
-                    ]}>
-                      <Text style={[
-                        styles.statusText,
-                        inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
-                      ]}>
-                        {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.cardSubtitle}>
-                    {new Date(inspection.updated_at).toLocaleDateString()}
-                  </Text>
-                  
-                  {/* Assign Button */}
-                  {inspectors.length > 0 && (
-                    <TouchableOpacity
-                      style={styles.assignButton}
-                      onPress={() => {
-                        setSelectedInspection(inspection);
-                        setShowAssignModal(true);
-                      }}
-                    >
-                      <UserPlus size={16} color="#3b82f6" />
-                      <Text style={styles.assignButtonText}>Assign to Inspector</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              ))
-            )}
-          </View>
-        </ScrollView>
-      </View>
-
-      {/* Assignment Modal */}
-      <Modal
-        visible={showAssignModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowAssignModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Assign Inspection</Text>
-            <Text style={styles.modalSubtitle} numberOfLines={2}>
-              {selectedInspection?.address}
-            </Text>
-
-            <Text style={styles.modalLabel}>Select Inspector:</Text>
-            <ScrollView style={styles.inspectorList}>
-              {inspectors.map((inspector) => (
-                <TouchableOpacity
-                  key={inspector.id}
-                  style={[
-                    styles.inspectorOption,
-                    selectedInspectorId === inspector.id && styles.inspectorOptionSelected
-                  ]}
-                  onPress={() => setSelectedInspectorId(inspector.id)}
-                >
-                  <View style={[
-                    styles.radioButton,
-                    selectedInspectorId === inspector.id && styles.radioButtonSelected
-                  ]}>
-                    {selectedInspectorId === inspector.id && (
-                      <View style={styles.radioButtonInner} />
-                    )}
-                  </View>
-                  <View style={styles.inspectorInfo}>
-                    <Text style={styles.inspectorName}>
-                      {inspector.full_name || inspector.email}
-                    </Text>
-                    <Text style={styles.inspectorEmail}>{inspector.email}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                onPress={() => {
-                  setShowAssignModal(false);
-                  setSelectedInspection(null);
-                  setSelectedInspectorId('');
-                }}
-                style={styles.modalCancelButton}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleAssignInspection}
-                style={[
-                  styles.modalConfirmButton,
-                  !selectedInspectorId && styles.buttonDisabled
-                ]}
-                disabled={!selectedInspectorId}
-              >
-                <Text style={styles.modalConfirmButtonText}>Assign</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        {/* Inspectors List */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My Inspectors ({inspectors.length})</Text>
+          {inspectors.length === 0 ? (
+            <Text style={styles.emptyText}>No inspectors yet</Text>
+          ) : (
+            inspectors.map((inspector) => (
+              <View key={inspector.id} style={styles.card}>
+                <Text style={styles.cardTitle}>{inspector.full_name || inspector.email}</Text>
+                <Text style={styles.cardSubtitle}>{inspector.email}</Text>
+              </View>
+            ))
+          )}
         </View>
-      </Modal>
+
+        {/* Inspections List */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>My Inspections ({inspections.length})</Text>
+          {inspections.length === 0 ? (
+            <Text style={styles.emptyText}>No inspections yet</Text>
+          ) : (
+            inspections.map((inspection) => (
+              <View key={inspection.id} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.cardTitle} numberOfLines={1}>
+                    {inspection.address}
+                  </Text>
+                  <View style={[
+                    styles.statusBadge,
+                    inspection.status === 'complete' ? styles.statusComplete : styles.statusIncomplete
+                  ]}>
+                    <Text style={[
+                      styles.statusText,
+                      inspection.status === 'complete' ? styles.statusCompleteText : styles.statusIncompleteText
+                    ]}>
+                      {inspection.status === 'complete' ? 'Complete' : 'In Progress'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.cardSubtitle}>
+                  {new Date(inspection.updated_at).toLocaleDateString()}
+                </Text>
+                
+                {/* Assign Button */}
+                {inspectors.length > 0 && (
+                  <TouchableOpacity
+                    style={styles.assignButton}
+                    onPress={() => {
+                      setSelectedInspection(inspection);
+                      setShowAssignModal(true);
+                    }}
+                  >
+                    <UserPlus size={16} color="#3b82f6" />
+                    <Text style={styles.assignButtonText}>Assign to Inspector</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))
+          )}
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -328,31 +255,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#111827',
   },
-  content: {
-    flex: 1,
-    padding: 16,
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   header: {
-    marginBottom: 24,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
   },
   backButton: {
-    marginBottom: 12,
+    width: 60,
   },
   backButtonText: {
     color: '#3b82f6',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#f3f4f6',
   },
-  settingsButton: {
-    padding: 8,
+  headerTitleLight: {
+    color: '#111827',
   },
   scrollView: {
     flex: 1,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, SafeAreaView, StatusBar, StyleSheet, Platform, useColorScheme } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 interface AssignedPropertiesListProps {
@@ -9,6 +9,10 @@ interface AssignedPropertiesListProps {
 }
 
 export default function AssignedPropertiesList({ currentUser, onSelectInspection, onBack }: AssignedPropertiesListProps) {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const [assignments, setAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -53,17 +57,21 @@ export default function AssignedPropertiesList({ currentUser, onSelectInspection
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Assigned Inspections</Text>
-        </View>
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
+      
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Assigned Properties</Text>
+        <View style={styles.backButton} />
+      </View>
 
+      <View style={styles.content}>
         {/* Assignments List */}
         <ScrollView style={styles.scrollView}>
           {assignments.length === 0 ? (
@@ -124,27 +132,39 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#111827',
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  content: {
-    flex: 1,
-    padding: 16,
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   header: {
-    marginBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
   },
   backButton: {
-    marginBottom: 12,
+    width: 60,
   },
   backButtonText: {
     color: '#3b82f6',
     fontSize: 16,
-    fontWeight: '600',
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#f3f4f6',
+  },
+  headerTitleLight: {
+    color: '#111827',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
   },
   scrollView: {
     flex: 1,

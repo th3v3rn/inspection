@@ -12,6 +12,7 @@ import {
   StatusBar,
   Platform,
   StyleSheet,
+  useColorScheme,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { speechService } from "../../lib/speechService";
@@ -48,6 +49,10 @@ export default function CategoryInspection({
   address = "",
   inspectionId: inspectionIdProp,
 }: CategoryInspectionProps) {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const { propertyData: globalPropertyData, isPropertyDataAvailable } = useProperty();
   
   // Initialize audio recorder with expo-audio
@@ -1489,7 +1494,18 @@ export default function CategoryInspection({
   };
 
   const handlePrevious = () => {
-    // Just navigate without saving
+    console.log("=== CategoryInspection handlePrevious ===");
+    console.log("Saving form data before previous:", JSON.stringify(formData, null, 2));
+    
+    // Save the data first
+    onComplete({
+      category,
+      ...formData,
+      completed: false, // Not fully completed, just moving to previous
+      timestamp: new Date().toISOString(),
+    });
+    
+    // Then navigate to previous category
     if (onPrevious) {
       onPrevious();
     }
@@ -1525,34 +1541,46 @@ export default function CategoryInspection({
 
   // For all other categories, use the existing form
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>
-              {category} Inspection
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              Use voice recording or manual input to fill the form
-            </Text>
-          </View>
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
+      
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onCancel} style={styles.backButton}>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>{category} Inspection</Text>
+        <View style={styles.backButton} />
+      </View>
 
-          {/* Action Buttons */}
+      <ScrollView style={styles.content}>
+        {/* Voice Recording Section */}
+        <View style={[styles.card, !isDarkMode && styles.cardLight]}>
+          <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Voice Recording</Text>
+          
           <View style={styles.actionButtons}>
             <TouchableOpacity
               onPress={handleVoiceRecording}
               disabled={isCapturing}
               style={[
                 styles.actionButton,
-                isRecording ? styles.recordingButton : isCapturing ? styles.disabledButton : styles.normalButton
+                isRecording ? styles.recordingButton : 
+                isCapturing ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
+                [styles.normalButton, !isDarkMode && styles.normalButtonLight]
               ]}
             >
-              <Text style={styles.actionButtonIcon}>
+              <Text style={[
+                styles.actionButtonIcon,
+                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
+              ]}>
                 {isRecording ? "⏹️" : "🎤"}
               </Text>
-              <Text style={styles.actionButtonText}>
+              <Text style={[
+                styles.actionButtonText,
+                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
+              ]}>
                 {isRecording ? "Stop" : "Record"}
               </Text>
             </TouchableOpacity>
@@ -1562,13 +1590,20 @@ export default function CategoryInspection({
               disabled={isRecording || isCapturing}
               style={[
                 styles.actionButton,
-                (isCapturing || isRecording) ? styles.disabledButton : styles.normalButton
+                (isCapturing || isRecording) ? [styles.disabledButton, !isDarkMode && styles.disabledButtonLight] : 
+                [styles.normalButton, !isDarkMode && styles.normalButtonLight]
               ]}
             >
-              <Text style={styles.actionButtonIcon}>
+              <Text style={[
+                styles.actionButtonIcon,
+                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonIconLight
+              ]}>
                 {isCapturing ? "⏳" : "📷"}
               </Text>
-              <Text style={styles.actionButtonText}>
+              <Text style={[
+                styles.actionButtonText,
+                !isRecording && !isCapturing && !isDarkMode && styles.actionButtonTextLight
+              ]}>
                 {isCapturing ? "Capturing..." : "Capture"}
               </Text>
             </TouchableOpacity>
@@ -1717,27 +1752,27 @@ export default function CategoryInspection({
 
           {/* Form Fields */}
           <View style={styles.formSection}>
-            <Text style={styles.formTitle}>
+            <Text style={[styles.formTitle, !isDarkMode && styles.formTitleLight]}>
               {category} Inspection Form
             </Text>
 
             {getFormFields(category, formData).map((field) => (
               <View key={field.id} style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>{field.label}</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>{field.label}</Text>
                 {field.type === "dropdown" ? (
-                  <View style={styles.pickerContainer}>
+                  <View style={[styles.pickerContainer, !isDarkMode && styles.pickerContainerLight]}>
                     <Picker
                       selectedValue={formData[field.id as keyof typeof formData] || ""}
                       onValueChange={(value) => handleInputChange(field.id, value)}
-                      style={styles.picker}
-                      dropdownIconColor="#9ca3af"
+                      style={[styles.picker, !isDarkMode && styles.pickerLight]}
+                      dropdownIconColor={isDarkMode ? "#9ca3af" : "#6b7280"}
                     >
                       {field.options?.map((option) => (
                         <Picker.Item 
                           key={option} 
                           label={option || "Select..."} 
                           value={option} 
-                          color="#f3f4f6"
+                          color={isDarkMode ? "#f3f4f6" : "#111827"}
                         />
                       ))}
                     </Picker>
@@ -1749,24 +1784,26 @@ export default function CategoryInspection({
                       const newValue = !currentValue;
                       handleInputChange(field.id, newValue);
                     }}
-                    style={styles.checkboxContainer}
+                    style={[styles.checkboxContainer, !isDarkMode && styles.checkboxContainerLight]}
                   >
                     <View style={[
                       styles.checkbox,
-                      formData[field.id as keyof typeof formData] && styles.checkboxChecked
+                      !isDarkMode && styles.checkboxLight,
+                      formData[field.id as keyof typeof formData] && styles.checkboxChecked,
+                      formData[field.id as keyof typeof formData] && !isDarkMode && styles.checkboxCheckedLight
                     ]}>
                       {formData[field.id as keyof typeof formData] && (
                         <Text style={styles.checkboxCheck}>✓</Text>
                       )}
                     </View>
-                    <Text style={styles.checkboxLabel}>
+                    <Text style={[styles.checkboxLabel, !isDarkMode && styles.checkboxLabelLight]}>
                       {formData[field.id as keyof typeof formData] ? 'Yes' : 'No'}
                     </Text>
                   </TouchableOpacity>
                 ) : field.id === "surveyDateTime" ? (
                   <View style={styles.dateTimeRow}>
                     <TextInput
-                      style={[styles.input, styles.dateTimeInput]}
+                      style={[styles.input, styles.dateTimeInput, !isDarkMode && styles.inputLight]}
                       value={formData[field.id as keyof typeof formData] || ""}
                       onChangeText={(text) => handleInputChange(field.id, text)}
                       placeholder={field.placeholder}
@@ -1785,14 +1822,14 @@ export default function CategoryInspection({
                         });
                         handleInputChange(field.id, dateTimeString);
                       }}
-                      style={styles.nowButton}
+                      style={[styles.nowButton, !isDarkMode && styles.nowButtonLight]}
                     >
-                      <Text style={styles.nowButtonText}>Now</Text>
+                      <Text style={[styles.nowButtonText, !isDarkMode && styles.nowButtonTextLight]}>Now</Text>
                     </TouchableOpacity>
                   </View>
                 ) : (
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, !isDarkMode && styles.inputLight]}
                     value={String(formData[field.id as keyof typeof formData] || "")}
                     onChangeText={(text) => handleInputChange(field.id, text)}
                     placeholder={field.placeholder}
@@ -1813,12 +1850,14 @@ export default function CategoryInspection({
               disabled={isFirstCategory}
               style={[
                 styles.navButton,
+                !isDarkMode && styles.navButtonLight,
                 styles.navButtonLeft,
                 isFirstCategory && styles.navButtonDisabled
               ]}
             >
               <Text style={[
                 styles.navButtonText,
+                !isDarkMode && styles.navButtonTextLight,
                 isFirstCategory && styles.navButtonTextDisabled
               ]}>
                 ← Previous
@@ -1827,9 +1866,9 @@ export default function CategoryInspection({
 
             <TouchableOpacity
               onPress={handleBackToCategories}
-              style={styles.completeButton}
+              style={[styles.completeButton, !isDarkMode && styles.completeButtonLight]}
             >
-              <Text style={styles.completeButtonText}>Complete</Text>
+              <Text style={[styles.completeButtonText, !isDarkMode && styles.completeButtonTextLight]}>Complete</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1837,12 +1876,14 @@ export default function CategoryInspection({
               disabled={isLastCategory}
               style={[
                 styles.navButton,
+                !isDarkMode && styles.navButtonLight,
                 styles.navButtonRight,
                 isLastCategory && styles.navButtonDisabled
               ]}
             >
               <Text style={[
                 styles.navButtonText,
+                !isDarkMode && styles.navButtonTextLight,
                 isLastCategory && styles.navButtonTextDisabled
               ]}>
                 Next →
@@ -1860,25 +1901,83 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#111827',
   },
-  scrollView: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  content: {
-    padding: 16,
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   header: {
-    marginBottom: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
+  },
+  backButton: {
+    width: 60,
+  },
+  backButtonText: {
+    color: '#3b82f6',
+    fontSize: 16,
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#f3f4f6',
+  },
+  headerTitleLight: {
+    color: '#111827',
+  },
+  content: {
+    flex: 1,
+    padding: 16,
+  },
+  card: {
+    backgroundColor: '#1f2937',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  cardLight: {
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#f3f4f6',
+    marginBottom: 12,
+  },
+  cardTitleLight: {
+    color: '#111827',
+  },
+  input: {
+    backgroundColor: '#374151',
+    color: '#f3f4f6',
+    padding: 12,
+    borderRadius: 8,
+    fontSize: 16,
+  },
+  inputLight: {
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  fieldContainer: {
+    marginBottom: 16,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#d1d5db',
     marginBottom: 8,
   },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#d1d5db',
+  fieldLabelLight: {
+    color: '#374151',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -1899,6 +1998,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     borderColor: '#4b5563',
   },
+  normalButtonLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   recordingButton: {
     backgroundColor: '#dc2626',
     borderColor: '#ef4444',
@@ -1907,14 +2010,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#4b5563',
     borderColor: '#6b7280',
   },
+  disabledButtonLight: {
+    backgroundColor: '#e5e7eb',
+    borderColor: '#d1d5db',
+  },
   actionButtonIcon: {
     color: '#ffffff',
     fontWeight: '600',
     marginRight: 8,
   },
+  actionButtonIconLight: {
+    color: '#374151',
+  },
   actionButtonText: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  actionButtonTextLight: {
+    color: '#374151',
   },
   imagesSection: {
     marginBottom: 24,
@@ -2081,24 +2194,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     color: '#f3f4f6',
   },
-  fieldContainer: {
-    marginBottom: 16,
-  },
-  fieldLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    marginBottom: 8,
-    color: '#e5e7eb',
-  },
-  input: {
-    backgroundColor: '#1f2937',
-    padding: 12,
-    borderWidth: 1,
-    borderColor: '#4b5563',
-    borderRadius: 8,
-    minHeight: 80,
-    color: '#f3f4f6',
-    textAlignVertical: 'top',
+  formTitleLight: {
+    color: '#111827',
   },
   pickerContainer: {
     backgroundColor: '#374151',
@@ -2107,10 +2204,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: 'hidden',
   },
+  pickerContainerLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   picker: {
     height: 50,
     color: '#f3f4f6',
     backgroundColor: '#374151',
+  },
+  pickerLight: {
+    color: '#111827',
+    backgroundColor: '#ffffff',
   },
   checkboxContainer: {
     flexDirection: 'row',
@@ -2120,6 +2225,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4b5563',
     borderRadius: 8,
+  },
+  checkboxContainerLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
   },
   checkbox: {
     width: 24,
@@ -2131,9 +2240,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  checkboxLight: {
+    borderColor: '#9ca3af',
+  },
   checkboxChecked: {
     backgroundColor: '#4b5563',
     borderColor: '#6b7280',
+  },
+  checkboxCheckedLight: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
   },
   checkboxCheck: {
     color: '#ffffff',
@@ -2141,6 +2257,9 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     color: '#e5e7eb',
+  },
+  checkboxLabelLight: {
+    color: '#111827',
   },
   dateTimeRow: {
     flexDirection: 'row',
@@ -2158,9 +2277,16 @@ const styles = StyleSheet.create({
     borderColor: '#4b5563',
     justifyContent: 'center',
   },
+  nowButtonLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   nowButtonText: {
     color: '#f3f4f6',
     fontWeight: '600',
+  },
+  nowButtonTextLight: {
+    color: '#374151',
   },
   navigationButtons: {
     flexDirection: 'row',
@@ -2178,6 +2304,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#4b5563',
     borderColor: '#6b7280',
   },
+  navButtonLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   navButtonLeft: {
     marginRight: 8,
   },
@@ -2193,6 +2323,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#f3f4f6',
   },
+  navButtonTextLight: {
+    color: '#374151',
+  },
   navButtonTextDisabled: {
     color: '#9ca3af',
   },
@@ -2205,9 +2338,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4b5563',
   },
+  completeButtonLight: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
   completeButtonText: {
     color: '#f3f4f6',
     textAlign: 'center',
     fontWeight: '600',
+  },
+  completeButtonTextLight: {
+    color: '#ffffff',
   },
 });

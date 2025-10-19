@@ -12,6 +12,7 @@ import {
   StatusBar,
   StyleSheet,
   Linking,
+  useColorScheme,
 } from "react-native";
 import {
   Mic,
@@ -88,6 +89,10 @@ export default function InspectionForm({
   onComplete, 
   onSave 
 }: InspectionFormProps) {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const router = useRouter();
   const params = useLocalSearchParams();
   const paramsInspectionId = params.id as string;
@@ -214,9 +219,6 @@ export default function InspectionForm({
 
   // Add a ref to track if inspection has been loaded
   const inspectionLoaded = useRef(false);
-  
-  // Add a ref to track property_id
-  const propertyIdRef = useRef<string | null>(null);
 
   // Show loading if currentUser is not available yet
   if (!currentUser) {
@@ -311,6 +313,8 @@ export default function InspectionForm({
         sync_status: data.sync_status || "synced",
         date: data.date || new Date().toISOString(),
         inspection_complete: data.inspection_complete || false,
+        // CRITICAL: Include property_metadata so PropertyIDForm can load it
+        property_metadata: data.property_metadata || null,
       });
       
       setAddress(data.address || "");
@@ -347,32 +351,6 @@ export default function InspectionForm({
     "Systems and Utilities",
     "Finish Up",
   ];
-
-  // Initialize property ID when component mounts or when we need it
-  const initPropertyId = async () => {
-    if (propertyIdRef.current) {
-      console.log('Property ID already initialized:', propertyIdRef.current);
-      return;
-    }
-
-    // Don't auto-create property - user must complete Property ID form first
-    console.log('Property ID not initialized - user must complete Property ID form');
-  };
-
-  // Get or create property ID
-  const getPropertyId = async (): Promise<string | null> => {
-    if (propertyIdRef.current) {
-      return propertyIdRef.current;
-    }
-
-    // Don't auto-create property - user must complete Property ID form first
-    Alert.alert(
-      "Complete Property ID First",
-      "Please complete and save the Property ID section before using features that require a property record.",
-      [{ text: "OK" }]
-    );
-    return null;
-  };
 
   // Function to fetch property data from Smarty API
   const fetchPropertyData = async (selectedAddress: string) => {
@@ -485,10 +463,13 @@ export default function InspectionForm({
     // Fetch property data from Smarty API immediately
     await fetchPropertyData(selectedAddress);
     
-    // Create inspection in database immediately
+    // Create inspection in database immediately with property_api_data
     if (!currentInspectionId) {
       try {
         console.log("Creating inspection in database...");
+        
+        // Wait a moment for propertyData to be set
+        await new Promise(resolve => setTimeout(resolve, 500));
         
         const inspectionData = {
           address: selectedAddress,
@@ -498,9 +479,11 @@ export default function InspectionForm({
           sync_status: 'not-synced',
           inspector_id: currentUser.id,
           admin_id: currentUser.role === 'admin' ? currentUser.id : currentUser.admin_id,
-          property_api_data: null,
+          property_api_data: propertyData?.propertyData || null,
           inspection_complete: false,
         };
+
+        console.log("Inspection data to create:", JSON.stringify(inspectionData, null, 2));
 
         const { data, error } = await supabase
           .from('inspections')
@@ -514,12 +497,13 @@ export default function InspectionForm({
         }
 
         console.log('✅ Inspection created in database with ID:', data.id);
+        console.log('✅ Property API data saved:', data.property_api_data ? 'Yes' : 'No');
         setCurrentInspectionId(data.id);
         
         // Verify the inspection was created
         const { data: verifyData, error: verifyError } = await supabase
           .from('inspections')
-          .select('id')
+          .select('id, property_api_data')
           .eq('id', data.id)
           .single();
         
@@ -527,6 +511,7 @@ export default function InspectionForm({
           console.error('❌ Failed to verify inspection creation:', verifyError);
         } else {
           console.log('✅ Verified inspection exists in database:', verifyData);
+          console.log('✅ Verified property_api_data:', verifyData.property_api_data ? 'Present' : 'Missing');
         }
       } catch (error) {
         console.error('Failed to create inspection:', error);
@@ -534,6 +519,32 @@ export default function InspectionForm({
       }
     } else {
       console.log('Inspection already exists with ID:', currentInspectionId);
+      
+      // Update existing inspection with property_api_data if it doesn't have it
+      try {
+        const { data: existingInspection } = await supabase
+          .from('inspections')
+          .select('property_api_data')
+          .eq('id', currentInspectionId)
+          .single();
+        
+        if (!existingInspection?.property_api_data && propertyData?.propertyData) {
+          console.log('Updating existing inspection with property_api_data...');
+          
+          const { error } = await supabase
+            .from('inspections')
+            .update({ property_api_data: propertyData.propertyData })
+            .eq('id', currentInspectionId);
+          
+          if (error) {
+            console.error('Error updating inspection with property_api_data:', error);
+          } else {
+            console.log('✅ Existing inspection updated with property_api_data');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking/updating existing inspection:', error);
+      }
     }
   };
 
@@ -551,57 +562,38 @@ export default function InspectionForm({
     console.log("Category key:", categoryKey);
     console.log("Current formData.categories:", JSON.stringify(formData.categories, null, 2));
     
-    // If this is the Property ID category, extract the property_id
-    if (categoryKey === 'property_id' && categoryData.property_id) {
-      console.log("Setting property_id in formData:", categoryData.property_id);
-      
-      // Store in ref for immediate access - THIS IS CRITICAL
-      propertyIdRef.current = categoryData.property_id;
-      console.log("��� propertyIdRef.current set to:", propertyIdRef.current);
-      
-      // Update formData with property_id - this will trigger re-render
-      setFormData((prev) => ({
-        ...prev,
-        property_id: categoryData.property_id,
-        categories: {
-          ...prev.categories,
-          [categoryKey]: categoryData,
-        },
-      }));
-      
-      // Also update the inspection in the database with the property_id
-      if (currentInspectionId) {
-        try {
-          const { error } = await supabase
-            .from('inspections')
-            .update({ property_id: categoryData.property_id })
-            .eq('id', currentInspectionId);
-          
-          if (error) {
-            console.error('Error updating inspection with property_id:', error);
-          } else {
-            console.log('✅ Inspection updated with property_id:', categoryData.property_id);
-          }
-        } catch (error) {
-          console.error('Error updating inspection:', error);
-        }
-      }
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        categories: {
-          ...prev.categories,
-          [categoryKey]: categoryData,
-        },
-      }));
-    }
-    
-    console.log("Updated formData.categories:", JSON.stringify({
+    const updatedCategories = {
       ...formData.categories,
       [categoryKey]: categoryData,
-    }, null, 2));
+    };
     
-    // Only go back to category selection if the category is marked as completed
+    setFormData((prev) => ({
+      ...prev,
+      categories: updatedCategories,
+    }));
+    
+    console.log("Updated formData.categories:", JSON.stringify(updatedCategories, null, 2));
+    
+    // Save to database immediately
+    if (currentInspectionId) {
+      try {
+        console.log("Saving categories to database...");
+        const { error } = await supabase
+          .from('inspections')
+          .update({ categories: updatedCategories })
+          .eq('id', currentInspectionId);
+        
+        if (error) {
+          console.error("Error saving categories:", error);
+        } else {
+          console.log("✅ Categories saved to database");
+        }
+      } catch (error) {
+        console.error("Error in handleCategoryComplete:", error);
+      }
+    }
+    
+    // Always go back to category selection when completed is true
     if (categoryData.completed) {
       setSelectedCategory(null);
       setStep(2);
@@ -734,45 +726,72 @@ export default function InspectionForm({
 
   const renderAddressEntry = () => {
     return (
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Property Address</Text>
+      <View style={[styles.card, !isDarkMode && styles.cardLight]}>
+        <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Property Address</Text>
 
         <View style={styles.methodSelector}>
           <TouchableOpacity
-            style={[styles.methodButton, addressMethod === "google" && styles.methodButtonActive]}
+            style={[
+              styles.methodButton, 
+              !isDarkMode && styles.methodButtonLight,
+              addressMethod === "google" && styles.methodButtonActive,
+              addressMethod === "google" && !isDarkMode && styles.methodButtonActiveLight
+            ]}
             onPress={() => setAddressMethod("google")}
           >
             <Search
               size={20}
-              color={addressMethod === "google" ? "#9ca3af" : "#6b7280"}
+              color={addressMethod === "google" ? "#3b82f6" : (isDarkMode ? "#6b7280" : "#9ca3af")}
             />
-            <Text style={[styles.methodButtonText, addressMethod === "google" && styles.methodButtonTextActive]}>
+            <Text style={[
+              styles.methodButtonText, 
+              !isDarkMode && styles.methodButtonTextLight,
+              addressMethod === "google" && styles.methodButtonTextActive
+            ]}>
               Search
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.methodButton, addressMethod === "manual" && styles.methodButtonActive]}
+            style={[
+              styles.methodButton, 
+              !isDarkMode && styles.methodButtonLight,
+              addressMethod === "manual" && styles.methodButtonActive,
+              addressMethod === "manual" && !isDarkMode && styles.methodButtonActiveLight
+            ]}
             onPress={() => setAddressMethod("manual")}
           >
             <MapPin
               size={20}
-              color={addressMethod === "manual" ? "#9ca3af" : "#6b7280"}
+              color={addressMethod === "manual" ? "#3b82f6" : (isDarkMode ? "#6b7280" : "#9ca3af")}
             />
-            <Text style={[styles.methodButtonText, addressMethod === "manual" && styles.methodButtonTextActive]}>
+            <Text style={[
+              styles.methodButtonText, 
+              !isDarkMode && styles.methodButtonTextLight,
+              addressMethod === "manual" && styles.methodButtonTextActive
+            ]}>
               Manual
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.methodButton, addressMethod === "assigned" && styles.methodButtonActive]}
+            style={[
+              styles.methodButton, 
+              !isDarkMode && styles.methodButtonLight,
+              addressMethod === "assigned" && styles.methodButtonActive,
+              addressMethod === "assigned" && !isDarkMode && styles.methodButtonActiveLight
+            ]}
             onPress={() => setAddressMethod("assigned")}
           >
             <ChevronRight
               size={20}
-              color={addressMethod === "assigned" ? "#9ca3af" : "#6b7280"}
+              color={addressMethod === "assigned" ? "#3b82f6" : (isDarkMode ? "#6b7280" : "#9ca3af")}
             />
-            <Text style={[styles.methodButtonText, addressMethod === "assigned" && styles.methodButtonTextActive]}>
+            <Text style={[
+              styles.methodButtonText, 
+              !isDarkMode && styles.methodButtonTextLight,
+              addressMethod === "assigned" && styles.methodButtonTextActive
+            ]}>
               Assigned
             </Text>
           </TouchableOpacity>
@@ -780,10 +799,10 @@ export default function InspectionForm({
 
         {addressMethod === "google" && (
           <View>
-            <View style={styles.searchInputContainer}>
-              <Search size={20} color="#6b7280" style={styles.searchIcon} />
+            <View style={[styles.searchInputContainer, !isDarkMode && styles.searchInputContainerLight]}>
+              <Search size={20} color={isDarkMode ? "#6b7280" : "#9ca3af"} style={styles.searchIcon} />
               <TextInput
-                style={styles.searchInput}
+                style={[styles.searchInput, !isDarkMode && styles.inputLight]}
                 placeholder="Start typing an address..."
                 placeholderTextColor="#9ca3af"
                 value={address}
@@ -799,21 +818,21 @@ export default function InspectionForm({
               {isSearching && (
                 <ActivityIndicator
                   size="small"
-                  color="#9ca3af"
+                  color={isDarkMode ? "#9ca3af" : "#3b82f6"}
                   style={styles.searchSpinner}
                 />
               )}
             </View>
 
             {addressSuggestions.length > 0 && (
-              <View style={styles.suggestionsContainer}>
+              <View style={[styles.suggestionsContainer, !isDarkMode && styles.suggestionsContainerLight]}>
                 {addressSuggestions.map((suggestion, index) => (
                   <TouchableOpacity
                     key={index}
                     style={[styles.suggestionItem, index < addressSuggestions.length - 1 && styles.suggestionItemBorder]}
                     onPress={() => selectAddress(suggestion)}
                   >
-                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                    <Text style={[styles.suggestionText, !isDarkMode && styles.suggestionTextLight]}>{suggestion}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -824,7 +843,7 @@ export default function InspectionForm({
         {addressMethod === "manual" && (
           <View style={styles.manualInputContainer}>
             <TextInput
-              style={styles.input}
+              style={[styles.input, !isDarkMode && styles.inputLight]}
               placeholder="Full address"
               placeholderTextColor="#9ca3af"
               value={address}
@@ -837,21 +856,26 @@ export default function InspectionForm({
         )}
 
         {addressMethod === "assigned" && (
-          <View style={styles.suggestionsContainer}>
+          <View style={[styles.suggestionsContainer, !isDarkMode && styles.suggestionsContainerLight]}>
             {assignedAddresses.map((assignedAddress, index) => (
               <TouchableOpacity
                 key={index}
                 style={[styles.suggestionItem, index < assignedAddresses.length - 1 && styles.suggestionItemBorder]}
                 onPress={() => selectAddress(assignedAddress)}
               >
-                <Text style={styles.suggestionText}>{assignedAddress}</Text>
+                <Text style={[styles.suggestionText, !isDarkMode && styles.suggestionTextLight]}>{assignedAddress}</Text>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
         <TouchableOpacity
-          style={[styles.primaryButton, !address && styles.buttonDisabled]}
+          style={[
+            styles.primaryButton, 
+            !isDarkMode && styles.primaryButtonLight,
+            !address && styles.buttonDisabled,
+            !address && !isDarkMode && styles.buttonDisabledLight
+          ]}
           disabled={!address}
           onPress={() => {
             setFormData((prev) => ({ ...prev, address }));
@@ -863,10 +887,11 @@ export default function InspectionForm({
 
         {/* Back to Dashboard Button */}
         <TouchableOpacity
+          onPress={handleClose}
           style={styles.backButton}
-          onPress={handleBackToDashboard}
+          data-tempoelementid="tempo-8bd3da83-4ad9-468c-bcfd-820964030869"
         >
-          <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>Back to Dashboard</Text>
         </TouchableOpacity>
       </View>
     );
@@ -874,9 +899,9 @@ export default function InspectionForm({
 
   const renderCategorySelection = () => {
     return (
-      <View style={styles.card}>
+      <View style={[styles.card, !isDarkMode && styles.cardLight]}>
         <View style={styles.categoryHeader}>
-          <Text style={styles.cardTitle}>Inspection Categories</Text>
+          <Text style={[styles.cardTitle, !isDarkMode && styles.cardTitleLight]}>Inspection Categories</Text>
           <TouchableOpacity 
             onPress={handleSaveInspection}
             disabled={isSaving}
@@ -891,8 +916,8 @@ export default function InspectionForm({
         </View>
 
         {/* Inspection Complete Toggle */}
-        <View style={styles.completeToggleContainer}>
-          <Text style={styles.completeToggleText}>Inspection Complete?</Text>
+        <View style={[styles.completeToggleContainer, !isDarkMode && styles.completeToggleContainerLight]}>
+          <Text style={[styles.completeToggleText, !isDarkMode && styles.completeToggleTextLight]}>Inspection Complete?</Text>
           <TouchableOpacity
             onPress={() => setIsInspectionComplete(!isInspectionComplete)}
             style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
@@ -917,11 +942,21 @@ export default function InspectionForm({
             return (
               <TouchableOpacity
                 key={index}
-                style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
+                style={[
+                  styles.categoryItem, 
+                  !isDarkMode && styles.categoryItemLight,
+                  isCompleted && styles.categoryItemCompleted,
+                  isCompleted && !isDarkMode && styles.categoryItemCompletedLight
+                ]}
                 onPress={() => handleCategorySelect(category)}
               >
                 <View style={styles.categoryItemContent}>
-                  <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
+                  <Text style={[
+                    styles.categoryItemText, 
+                    !isDarkMode && styles.categoryItemTextLight,
+                    isCompleted && styles.categoryItemTextCompleted,
+                    isCompleted && !isDarkMode && styles.categoryItemTextCompletedLight
+                  ]}>
                     {category}
                   </Text>
                   <View style={styles.categoryItemRight}>
@@ -956,225 +991,79 @@ export default function InspectionForm({
 
         {/* Property Outline Tool Button */}
         <TouchableOpacity
-          style={styles.secondaryButton}
+          style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
           onPress={() => setShowPropertyOutlineTool(true)}
         >
-          <Map size={20} color="#9ca3af" />
-          <Text style={styles.secondaryButtonText}>Property Outline Tool</Text>
+          <Map size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
+          <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Property Outline Tool</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.secondaryButton}
+          style={[styles.secondaryButton, !isDarkMode && styles.secondaryButtonLight]}
           onPress={handleGetDirections}
         >
-          <Navigation size={20} color="#9ca3af" />
-          <Text style={styles.secondaryButtonText}>Get Directions</Text>
+          <Navigation size={20} color={isDarkMode ? "#9ca3af" : "#374151"} />
+          <Text style={[styles.secondaryButtonText, !isDarkMode && styles.secondaryButtonTextLight]}>Get Directions</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.backButton}
-          onPress={handleBackToDashboard}
+          onPress={handleClose}
         >
-          <Text style={styles.backButtonText}>Back to Dashboard</Text>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>Back to Dashboard</Text>
         </TouchableOpacity>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      {showPropertyOutlineTool ? (
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
+
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3b82f6" />
+          <Text style={styles.loadingText}>Loading inspection...</Text>
+        </View>
+      ) : showPropertyOutlineTool ? (
         <PropertyOutlineTool
           address={formData.address}
-          propertyId={formData.property_id || propertyIdRef.current}
-          onSave={async (structures, exportImage) => {
-            console.log("PropertyOutlineTool onSave called");
-            console.log("formData.property_id:", formData.property_id);
-            console.log("propertyIdRef.current:", propertyIdRef.current);
-            
-            const propId = formData.property_id || propertyIdRef.current;
-            if (!propId) {
-              Alert.alert(
-                "Complete Property ID First",
-                "Please complete and save the Property ID section before using the Property Outline Tool.",
-                [{ text: "OK" }]
-              );
-              return;
-            }
-            
-            setShowPropertyOutlineTool(false);
-            setStep(2);
-          }}
-          onCancel={() => {
-            setShowPropertyOutlineTool(false);
-            setStep(2);
-          }}
+          onComplete={handlePropertyOutlineComplete}
+          onCancel={() => setShowPropertyOutlineTool(false)}
         />
+      ) : selectedCategory ? (
+        selectedCategory === "Property ID" ? (
+          <PropertyIDForm
+            onComplete={handleCategoryComplete}
+            onCancel={handleCancelCategory}
+            onNext={handleNextCategory}
+            onPrevious={handlePreviousCategory}
+            isFirstCategory={categories.indexOf(selectedCategory) === 0}
+            isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+            initialData={formData.categories?.property_id}
+            inspectionId={currentInspectionId}
+          />
+        ) : (
+          <CategoryInspection
+            category={selectedCategory}
+            onComplete={handleCategoryComplete}
+            onCancel={handleCancelCategory}
+            onNext={handleNextCategory}
+            onPrevious={handlePreviousCategory}
+            isFirstCategory={categories.indexOf(selectedCategory) === 0}
+            isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
+            initialData={formData.categories?.[selectedCategory.toLowerCase().replace(/ /g, '_')]}
+            address={formData.address}
+            inspectionId={currentInspectionId}
+          />
+        )
+      ) : step === 1 ? (
+        renderAddressEntry()
       ) : (
-        <>
-          {step === 1 && renderAddressEntry()}
-
-          {/* Category Selection List */}
-          {step === 2 && !selectedCategory && (
-            <ScrollView 
-              style={styles.categorySelection}
-              contentContainerStyle={styles.categorySelectionContent}
-              showsVerticalScrollIndicator={true}
-            >
-              <View style={styles.categoryHeader}>
-                <Text style={styles.sectionTitle}>Select Category</Text>
-                <TouchableOpacity 
-                  onPress={handleSaveInspection}
-                  disabled={isSaving}
-                  style={styles.saveButton}
-                >
-                  {isSaving ? (
-                    <ActivityIndicator size="small" color="#9ca3af" />
-                  ) : (
-                    <Save size={20} color="#9ca3af" />
-                  )}
-                </TouchableOpacity>
-              </View>
-
-              {/* Inspection Complete Toggle */}
-              <View style={styles.completeToggleContainer}>
-                <Text style={styles.completeToggleText}>Inspection Complete?</Text>
-                <TouchableOpacity
-                  onPress={() => setIsInspectionComplete(!isInspectionComplete)}
-                  style={[styles.toggleSwitch, isInspectionComplete && styles.toggleSwitchActive]}
-                >
-                  <View style={[styles.toggleThumb, isInspectionComplete && styles.toggleThumbActive]} />
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.propertyAddress}>Property: {formData.address}</Text>
-
-              {categories.map((category, index) => {
-                const categoryKey = category.toLowerCase().replace(/ /g, '_');
-                const isCompleted = formData.categories?.[categoryKey] && 
-                                   Object.keys(formData.categories[categoryKey]).length > 0;
-                const completionPercentage = calculateCategoryCompletion(formData.categories?.[categoryKey]);
-
-                return (
-                  <TouchableOpacity
-                    key={index}
-                    style={[styles.categoryItem, isCompleted && styles.categoryItemCompleted]}
-                    onPress={() => handleCategorySelect(category)}
-                  >
-                    <View style={styles.categoryItemContent}>
-                      <Text style={[styles.categoryItemText, isCompleted && styles.categoryItemTextCompleted]}>
-                        {category}
-                      </Text>
-                      <View style={styles.categoryItemRight}>
-                        {isCompleted && (
-                          <Text style={styles.completedBadge}>Completed</Text>
-                        )}
-                        <ChevronRight
-                          size={16}
-                          color={isCompleted ? "#10b981" : "#9ca3af"}
-                        />
-                      </View>
-                    </View>
-                    
-                    {/* Visual Fill Indicator */}
-                    <View style={styles.progressBarContainer}>
-                      <View 
-                        style={[
-                          styles.progressBarFill, 
-                          { 
-                            width: `${completionPercentage}%`,
-                            backgroundColor: completionPercentage === 100 ? '#10b981' : 
-                                            completionPercentage > 50 ? '#3b82f6' : 
-                                            completionPercentage > 0 ? '#f59e0b' : '#4b5563'
-                          }
-                        ]} 
-                      />
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={() => setShowPropertyOutlineTool(true)}
-              >
-                <Map size={20} color="#9ca3af" />
-                <Text style={styles.secondaryButtonText}>Property Outline Tool</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={handleGetDirections}
-              >
-                <Navigation size={20} color="#9ca3af" />
-                <Text style={styles.secondaryButtonText}>Get Directions</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.backButton}
-                onPress={handleBackToDashboard}
-              >
-                <Text style={styles.backButtonText}>Back to Dashboard</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          )}
-
-          {/* Category Forms */}
-          {step === 2 && selectedCategory && (
-            selectedCategory === "Property ID" ? (
-              <PropertyIDForm
-                key={formData.address || "property-id-form"}
-                onComplete={handleCategoryComplete}
-                onCancel={() => {
-                  setSelectedCategory(null);
-                  setStep(2);
-                }}
-                onNext={handleNextCategory}
-                onPrevious={handlePreviousCategory}
-                isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                initialData={{ 
-                  address: formData.address,
-                  propertyApiData: formData.propertyApiData,
-                  ...formData.categories?.property_id,
-                }}
-              />
-            ) : (
-              <CategoryInspection
-                category={selectedCategory}
-                inspectionId={currentInspectionId}
-                initialData={(() => {
-                  const categoryKey = selectedCategory.toLowerCase().replace(/ /g, '_');
-                  const data = formData.categories?.[categoryKey] || {};
-                  return data;
-                })()}
-                onComplete={handleCategoryComplete}
-                onCancel={() => {
-                  setSelectedCategory(null);
-                  setStep(2);
-                }}
-                onNext={() => {
-                  const currentIndex = categories.indexOf(selectedCategory);
-                  if (currentIndex < categories.length - 1) {
-                    const nextCategory = categories[currentIndex + 1];
-                    setSelectedCategory(nextCategory);
-                  }
-                }}
-                onPrevious={() => {
-                  const currentIndex = categories.indexOf(selectedCategory);
-                  if (currentIndex > 0) {
-                    const prevCategory = categories[currentIndex - 1];
-                    setSelectedCategory(prevCategory);
-                  }
-                }}
-                isFirstCategory={categories.indexOf(selectedCategory) === 0}
-                isLastCategory={categories.indexOf(selectedCategory) === categories.length - 1}
-                address={formData.address}
-              />
-            )
-          )}
-        </>
+        renderCategorySelection()
       )}
     </SafeAreaView>
   );
@@ -1185,9 +1074,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#111827',
   },
-  content: {
-    flex: 1,
-    padding: 16,
+  containerLight: {
+    backgroundColor: '#ffffff',
   },
   loadingContainer: {
     flex: 1,
@@ -1196,87 +1084,103 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#9ca3af',
-    marginTop: 16,
-    fontSize: 16,
-  },
-  header: {
-    marginBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#f3f4f6',
-  },
-  closeButton: {
-    marginRight: 12,
+    marginTop: 12,
   },
   card: {
     backgroundColor: '#1f2937',
-    padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    padding: 20,
+    margin: 16,
+  },
+  cardLight: {
+    backgroundColor: '#f9fafb',
     borderWidth: 1,
-    borderColor: '#374151',
+    borderColor: '#e5e7eb',
   },
   cardTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 16,
+    fontSize: 18,
+    fontWeight: '600',
     color: '#f3f4f6',
+    marginBottom: 16,
+  },
+  cardTitleLight: {
+    color: '#111827',
   },
   methodSelector: {
     flexDirection: 'row',
-    marginBottom: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-    paddingBottom: 16,
+    marginBottom: 16,
+    gap: 8,
   },
   methodButton: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
-  methodButtonActive: {
-    backgroundColor: '#374151',
+    justifyContent: 'center',
+    padding: 12,
     borderRadius: 8,
-  },
-  methodButtonText: {
-    marginTop: 4,
-    color: '#6b7280',
-  },
-  methodButtonTextActive: {
-    color: '#9ca3af',
-  },
-  searchInputContainer: {
-    position: 'relative',
-    marginBottom: 16,
-  },
-  searchInput: {
     backgroundColor: '#374151',
     borderWidth: 1,
     borderColor: '#4b5563',
+  },
+  methodButtonLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
+  methodButtonActive: {
+    backgroundColor: '#1f2937',
+    borderColor: '#3b82f6',
+  },
+  methodButtonActiveLight: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#3b82f6',
+  },
+  methodButtonText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  methodButtonTextLight: {
+    color: '#4b5563',
+  },
+  methodButtonTextActive: {
+    color: '#3b82f6',
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#374151',
     borderRadius: 8,
-    padding: 12,
-    paddingLeft: 40,
-    color: '#f3f4f6',
-    fontSize: 16,
+    paddingHorizontal: 12,
+    marginBottom: 12,
+  },
+  searchInputContainerLight: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   searchIcon: {
-    position: 'absolute',
-    left: 12,
-    top: 12,
-    zIndex: 1,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    color: '#f3f4f6',
+    padding: 12,
+    fontSize: 16,
   },
   searchSpinner: {
-    position: 'absolute',
-    right: 12,
-    top: 12,
+    marginLeft: 8,
   },
   suggestionsContainer: {
-    borderWidth: 1,
-    borderColor: '#374151',
-    borderRadius: 8,
-    marginBottom: 16,
     backgroundColor: '#374151',
+    borderRadius: 8,
+    marginBottom: 12,
+    maxHeight: 200,
+  },
+  suggestionsContainerLight: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
   },
   suggestionItem: {
     padding: 12,
@@ -1287,35 +1191,59 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     color: '#f3f4f6',
+    fontSize: 14,
+  },
+  suggestionTextLight: {
+    color: '#111827',
   },
   manualInputContainer: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   input: {
     backgroundColor: '#374151',
-    borderWidth: 1,
-    borderColor: '#4b5563',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
     color: '#f3f4f6',
+    padding: 12,
+    borderRadius: 8,
     fontSize: 16,
   },
+  inputLight: {
+    backgroundColor: '#ffffff',
+    color: '#111827',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
   primaryButton: {
-    backgroundColor: '#374151',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    backgroundColor: '#3b82f6',
+    padding: 16,
     borderRadius: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#4b5563',
+    marginTop: 8,
   },
-  primaryButtonText: {
-    color: '#f3f4f6',
-    fontWeight: '600',
+  primaryButtonLight: {
+    backgroundColor: '#3b82f6',
   },
   buttonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#4b5563',
+  },
+  buttonDisabledLight: {
+    backgroundColor: '#d1d5db',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  backButton: {
+    marginTop: 12,
+    padding: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#3b82f6',
+    fontSize: 14,
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
   },
   categoryHeader: {
     flexDirection: 'row',
@@ -1324,7 +1252,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   saveButton: {
-    marginLeft: 12,
+    padding: 8,
   },
   completeToggleContainer: {
     flexDirection: 'row',
@@ -1334,19 +1262,27 @@ const styles = StyleSheet.create({
     padding: 12,
     backgroundColor: '#374151',
     borderRadius: 8,
+  },
+  completeToggleContainerLight: {
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   completeToggleText: {
     color: '#f3f4f6',
+    fontSize: 16,
     fontWeight: '500',
   },
+  completeToggleTextLight: {
+    color: '#111827',
+  },
   toggleSwitch: {
-    width: 56,
-    height: 32,
-    borderRadius: 16,
-    padding: 4,
+    width: 50,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#4b5563',
+    padding: 2,
+    justifyContent: 'center',
   },
   toggleSwitchActive: {
     backgroundColor: '#10b981',
@@ -1358,107 +1294,104 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   toggleThumbActive: {
-    marginLeft: 'auto',
+    alignSelf: 'flex-end',
   },
   propertyAddress: {
     color: '#9ca3af',
+    fontSize: 14,
     marginBottom: 16,
   },
   categoriesScroll: {
-    maxHeight: 400,
-    marginBottom: 16,
+    flex: 1,
   },
   categoriesScrollContent: {
-    paddingBottom: 8,
+    paddingBottom: 16,
   },
   categoryItem: {
-    flexDirection: 'column',
-    padding: 16,
-    marginBottom: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#4b5563',
     backgroundColor: '#374151',
-    overflow: 'hidden',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  categoryItemLight: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   categoryItemCompleted: {
+    backgroundColor: '#064e3b',
+    borderWidth: 1,
+    borderColor: '#047857',
+  },
+  categoryItemCompletedLight: {
+    backgroundColor: '#d1fae5',
     borderColor: '#10b981',
-  },
-  categoryItemText: {
-    fontWeight: '500',
-    color: '#f3f4f6',
-  },
-  categoryItemTextCompleted: {
-    color: '#6ee7b7',
-  },
-  categoryItemRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  completedBadge: {
-    color: '#6ee7b7',
-    marginRight: 8,
   },
   categoryItemContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  categoryItemText: {
+    color: '#f3f4f6',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  categoryItemTextLight: {
+    color: '#111827',
+  },
+  categoryItemTextCompleted: {
+    color: '#6ee7b7',
+  },
+  categoryItemTextCompletedLight: {
+    color: '#047857',
+  },
+  categoryItemRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  completedBadge: {
+    backgroundColor: '#047857',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    fontSize: 12,
+    color: '#6ee7b7',
+    fontWeight: '600',
+  },
   progressBarContainer: {
     height: 4,
-    backgroundColor: '#1f2937',
+    backgroundColor: '#4b5563',
     borderRadius: 2,
-    marginTop: 12,
+    marginTop: 8,
     overflow: 'hidden',
   },
   progressBarFill: {
     height: '100%',
     borderRadius: 2,
-    transition: 'width 0.3s ease',
   },
   secondaryButton: {
-    backgroundColor: '#374151',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 16,
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#374151',
+    padding: 14,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 8,
+  },
+  secondaryButtonLight: {
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: '#4b5563',
+    borderColor: '#d1d5db',
   },
   secondaryButtonText: {
-    color: '#9ca3af',
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  backButton: {
-    backgroundColor: '#4b5563',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#6b7280',
-  },
-  backButtonText: {
     color: '#f3f4f6',
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '500',
   },
-  categorySelection: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#1f2937',
-  },
-  categorySelectionContent: {
-    paddingBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#f3f4f6',
-    marginBottom: 16,
+  secondaryButtonTextLight: {
+    color: '#374151',
   },
 });

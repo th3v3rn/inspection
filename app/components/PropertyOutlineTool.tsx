@@ -15,6 +15,7 @@ import {
   Platform,
   StatusBar,
   SafeAreaView,
+  useColorScheme,
 } from "react-native";
 import Svg, { Path, Circle } from "react-native-svg";
 import {
@@ -42,7 +43,7 @@ interface Point {
 
 interface Structure {
   id: string;
-  type: 'foundation' | 'garage' | 'deck' | 'patio' | 'porch';
+  type: "foundation" | "garage" | "deck" | "patio" | "porch";
   points: Point[];
   color: string;
   label: string;
@@ -59,20 +60,500 @@ interface PropertyOutlineToolProps {
 }
 
 const STRUCTURE_TYPES = [
-  { type: 'foundation' as const, label: 'Foundation', color: '#ef4444', icon: Home },
-  { type: 'garage' as const, label: 'Garage', color: '#3b82f6', icon: Square },
-  { type: 'deck' as const, label: 'Deck', color: '#10b981', icon: Layers },
-  { type: 'patio' as const, label: 'Patio', color: '#f59e0b', icon: Layers },
-  { type: 'porch' as const, label: 'Porch', color: '#8b5cf6', icon: Layers },
+  {
+    type: "foundation" as const,
+    label: "Foundation",
+    color: "#ef4444",
+    icon: Home,
+  },
+  { type: "garage" as const, label: "Garage", color: "#3b82f6", icon: Square },
+  { type: "deck" as const, label: "Deck", color: "#10b981", icon: Layers },
+  { type: "patio" as const, label: "Patio", color: "#f59e0b", icon: Layers },
+  { type: "porch" as const, label: "Porch", color: "#8b5cf6", icon: Layers },
 ];
 
 const DEFAULT_ADDRESS = "123 Main St, Anytown, USA";
 const CLOSE_THRESHOLD = 20; // pixels - distance to first point to auto-close
 const SNAP_ANGLE_THRESHOLD = 8; // degrees - snap to 90° if within this threshold
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const MAP_WIDTH = Math.min(800, SCREEN_WIDTH - 32); // Responsive width with padding
 const MAP_HEIGHT = 400; // Further reduced height to show measurements checkbox
 const DEFAULT_ZOOM = 20; // High zoom for detailed satellite view
+
+// Add light/dark theme tokens
+const darkTheme = {
+  containerBg: "#111827",
+  headerBg: "#1f2937",
+  border: "#374151",
+  headerTitle: "#f3f4f6",
+  inputBg: "#374151",
+  inputText: "#f3f4f6",
+  placeholder: "#9ca3af",
+  buttonMutedBg: "#4b5563",
+  coordsText: "#9ca3af",
+  typeSelectorBg: "#1f2937",
+  cardBg: "#374151",
+  textPrimary: "#f3f4f6",
+  mutedText: "#9ca3af",
+  zoomBg: "#ffffff",
+  zoomBorder: "#e5e7eb",
+  drawingPanelBg: "rgba(255, 255, 255, 0.95)",
+  drawingTitle: "#3b82f6",
+  drawingText: "#374151",
+  drawingPoints: "#111827",
+  structuresListBg: "#1f2937",
+  structuresTitle: "#f3f4f6",
+  structureCardBg: "#374151",
+  editInputBorder: "#3b82f6",
+  cancelEditBg: "#6b7280",
+  cancelEditText: "#e5e7eb",
+  saveEditBg: "#16a34a",
+  saveEditText: "#ffffff",
+  actionBarBg: "#1f2937",
+  cancelButtonBg: "#6b7280",
+  cancelButtonText: "#f3f4f6",
+  drawButtonBg: "#3b82f6",
+  drawButtonText: "#ffffff",
+  saveButtonBg: "#16a34a",
+  saveButtonText: "#ffffff",
+  primary: "#3b82f6",
+  success: "#16a34a",
+  danger: "#ef4444",
+  checkboxBorder: "#6b7280",
+  checkboxChecked: "#3b82f6",
+  white: "#ffffff",
+  black: "#000000",
+};
+
+const lightTheme = {
+  containerBg: "#f9fafb",
+  headerBg: "#ffffff",
+  border: "#e5e7eb",
+  headerTitle: "#111827",
+  inputBg: "#f3f4f6",
+  inputText: "#111827",
+  placeholder: "#6b7280",
+  buttonMutedBg: "#e5e7eb",
+  coordsText: "#6b7280",
+  typeSelectorBg: "#ffffff",
+  cardBg: "#f3f4f6",
+  textPrimary: "#111827",
+  mutedText: "#6b7280",
+  zoomBg: "#ffffff",
+  zoomBorder: "#e5e7eb",
+  drawingPanelBg: "rgba(255, 255, 255, 0.95)",
+  drawingTitle: "#2563eb",
+  drawingText: "#374151",
+  drawingPoints: "#111827",
+  structuresListBg: "#ffffff",
+  structuresTitle: "#111827",
+  structureCardBg: "#f3f4f6",
+  editInputBorder: "#2563eb",
+  cancelEditBg: "#e5e7eb",
+  cancelEditText: "#374151",
+  saveEditBg: "#16a34a",
+  saveEditText: "#ffffff",
+  actionBarBg: "#ffffff",
+  cancelButtonBg: "#e5e7eb",
+  cancelButtonText: "#111827",
+  drawButtonBg: "#2563eb",
+  drawButtonText: "#ffffff",
+  saveButtonBg: "#16a34a",
+  saveButtonText: "#ffffff",
+  primary: "#2563eb",
+  success: "#16a34a",
+  danger: "#ef4444",
+  checkboxBorder: "#9ca3af",
+  checkboxChecked: "#2563eb",
+  white: "#ffffff",
+  black: "#000000",
+};
+
+const createStyles = (theme: typeof darkTheme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.containerBg,
+    },
+    header: {
+      padding: 16,
+      paddingTop: Platform.OS === "android" ? 8 : 16,
+      backgroundColor: theme.headerBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    headerTitle: {
+      color: theme.headerTitle,
+      fontSize: 18,
+      fontWeight: "bold",
+    },
+    addressRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 8,
+    },
+    addressInput: {
+      flex: 1,
+      backgroundColor: theme.inputBg,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 14,
+      color: theme.inputText,
+    },
+    refreshButton: {
+      marginLeft: 8,
+      backgroundColor: theme.buttonMutedBg,
+      padding: 8,
+      borderRadius: 8,
+    },
+    coordsText: {
+      color: theme.coordsText,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    typeSelector: {
+      padding: 8,
+      backgroundColor: theme.typeSelectorBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    typeButton: {
+      marginRight: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.cardBg,
+      borderWidth: 1,
+    },
+    typeButtonActive: {
+      backgroundColor: theme.primary,
+    },
+    typeButtonText: {
+      marginLeft: 8,
+      fontWeight: "500",
+      color: theme.textPrimary,
+    },
+    typeButtonTextActive: {
+      color: theme.white,
+    },
+    measurementsToggle: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.typeSelectorBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    measurementsRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    checkbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 4,
+      borderWidth: 2,
+      borderColor: theme.checkboxBorder,
+      marginRight: 8,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    checkboxChecked: {
+      backgroundColor: theme.checkboxChecked,
+      borderColor: theme.checkboxChecked,
+    },
+    measurementsText: {
+      color: theme.textPrimary,
+      fontWeight: "500",
+    },
+    mapContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 32,
+    },
+    loadingText: {
+      marginTop: 16,
+      color: theme.mutedText,
+    },
+    noLocationText: {
+      color: theme.mutedText,
+      textAlign: "center",
+    },
+    zoomControls: {
+      position: "absolute",
+      top: 16,
+      right: 16,
+      zIndex: 50,
+      backgroundColor: theme.zoomBg,
+      borderRadius: 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 5,
+    },
+    zoomButton: {
+      padding: 12,
+    },
+    zoomButtonTop: {
+      borderBottomWidth: 1,
+      borderBottomColor: theme.zoomBorder,
+    },
+    drawingInstructions: {
+      position: "absolute",
+      top: 16,
+      left: 16,
+      right: 80,
+      backgroundColor: theme.drawingPanelBg,
+      padding: 12,
+      borderRadius: 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 4,
+      elevation: 5,
+      zIndex: 40,
+    },
+    drawingTitle: {
+      fontWeight: "bold",
+      color: theme.primary,
+    },
+    drawingText: {
+      fontSize: 14,
+      color: theme.drawingText,
+    },
+    drawingPoints: {
+      fontSize: 14,
+      color: theme.drawingPoints,
+      fontWeight: "500",
+    },
+    structuresList: {
+      backgroundColor: theme.structuresListBg,
+      padding: 16,
+      maxHeight: 256,
+    },
+    structuresTitle: {
+      fontWeight: "bold",
+      fontSize: 18,
+      marginBottom: 8,
+      color: theme.structuresTitle,
+    },
+    structureCard: {
+      backgroundColor: theme.structureCardBg,
+      padding: 12,
+      marginBottom: 8,
+      borderRadius: 8,
+      borderLeftWidth: 4,
+    },
+    editingRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    editInput: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.editInputBorder,
+      borderRadius: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      color: theme.inputText,
+    },
+    saveEditButton: {
+      marginLeft: 8,
+      backgroundColor: theme.success,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    saveEditButtonText: {
+      color: theme.white,
+      fontWeight: "500",
+    },
+    cancelEditButton: {
+      marginLeft: 4,
+      backgroundColor: theme.cancelEditBg,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 4,
+    },
+    cancelEditButtonText: {
+      color: theme.cancelEditText,
+      fontWeight: "500",
+    },
+    structureHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    structureName: {
+      fontWeight: "bold",
+      color: theme.textPrimary,
+      flex: 1,
+    },
+    structureActions: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    actionButton: {
+      padding: 8,
+    },
+    structureInfo: {
+      fontSize: 14,
+      color: theme.mutedText,
+    },
+    emptyText: {
+      textAlign: "center",
+      color: theme.cancelEditBg,
+      paddingVertical: 16,
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: 16,
+    },
+    modalContent: {
+      backgroundColor: theme.white,
+      borderRadius: 8,
+      padding: 24,
+      width: "100%",
+      maxWidth: 400,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: "bold",
+      marginBottom: 16,
+      color: "#111827",
+    },
+    modalInput: {
+      borderWidth: 1,
+      borderColor: "#d1d5db",
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginBottom: 16,
+      color: "#111827",
+    },
+    modalButtons: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+    },
+    modalCancelButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: "#e5e7eb",
+      borderRadius: 8,
+      marginRight: 8,
+    },
+    modalCancelButtonText: {
+      color: "#374151",
+      fontWeight: "500",
+    },
+    modalConfirmButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.primary,
+      borderRadius: 8,
+    },
+    modalConfirmButtonText: {
+      color: theme.white,
+      fontWeight: "500",
+    },
+    actionBar: {
+      padding: 16,
+      backgroundColor: theme.actionBarBg,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    drawingActions: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    cancelDrawingButton: {
+      flex: 1,
+      marginRight: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.cancelButtonBg,
+      borderRadius: 8,
+    },
+    cancelDrawingButtonText: {
+      textAlign: "center",
+      color: theme.cancelButtonText,
+      fontWeight: "500",
+    },
+    completeDrawingButton: {
+      flex: 1,
+      marginLeft: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.success,
+      borderRadius: 8,
+    },
+    completeDrawingButtonText: {
+      textAlign: "center",
+      color: theme.white,
+      fontWeight: "500",
+    },
+    normalActions: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    cancelButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.cancelButtonBg,
+      borderRadius: 8,
+    },
+    cancelButtonText: {
+      color: theme.cancelButtonText,
+      fontWeight: "500",
+    },
+    rightActions: {
+      flexDirection: "row",
+    },
+    drawButton: {
+      marginRight: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.drawButtonBg,
+      borderRadius: 8,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    drawButtonText: {
+      marginLeft: 8,
+      color: theme.drawButtonText,
+      fontWeight: "500",
+    },
+    saveButton: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.saveButtonBg,
+      borderRadius: 8,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    saveButtonDisabled: {
+      opacity: 0.5,
+    },
+    saveButtonText: {
+      marginLeft: 8,
+      color: theme.saveButtonText,
+      fontWeight: "500",
+    },
+  });
 
 const PropertyOutlineTool = ({
   address = DEFAULT_ADDRESS,
@@ -83,18 +564,26 @@ const PropertyOutlineTool = ({
   onCancel = () => {},
 }: PropertyOutlineToolProps) => {
   const [structures, setStructures] = useState<Structure[]>([]);
-  const [activeStructure, setActiveStructure] = useState<Structure | null>(null);
-  const [selectedType, setSelectedType] = useState<typeof STRUCTURE_TYPES[0]>(STRUCTURE_TYPES[0]);
+  const [activeStructure, setActiveStructure] = useState<Structure | null>(
+    null,
+  );
+  const [selectedType, setSelectedType] = useState<(typeof STRUCTURE_TYPES)[number]>(
+    STRUCTURE_TYPES[0],
+  );
   const [isDrawing, setIsDrawing] = useState(false);
   const [satelliteImageUrl, setSatelliteImageUrl] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [scale, setScale] = useState(1); // pixels per foot
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
   const [currentLat, setCurrentLat] = useState<number | null>(latitude || null);
-  const [currentLng, setCurrentLng] = useState<number | null>(longitude || null);
+  const [currentLng, setCurrentLng] = useState<number | null>(
+    longitude || null,
+  );
   const [addressInput, setAddressInput] = useState(address);
   const [showMeasurements, setShowMeasurements] = useState(true);
-  const [editingStructureId, setEditingStructureId] = useState<string | null>(null);
+  const [editingStructureId, setEditingStructureId] = useState<string | null>(
+    null,
+  );
   const [editingLabel, setEditingLabel] = useState("");
   const [showNameModal, setShowNameModal] = useState(false);
   const [pendingStructureName, setPendingStructureName] = useState("");
@@ -104,7 +593,13 @@ const PropertyOutlineTool = ({
   const [mapLayout, setMapLayout] = useState({ x: 0, y: 0 });
   const isAddingPointRef = useRef(false); // Prevent duplicate point additions
 
-  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+  const googleMapsApiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+
+  // Add system color scheme support
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const theme = isDark ? darkTheme : lightTheme;
+  const styles = React.useMemo(() => createStyles(theme), [isDark]);
 
   useEffect(() => {
     // Load saved outlines if propertyId is provided
@@ -117,15 +612,15 @@ const PropertyOutlineTool = ({
       setCurrentLat(latitude);
       setCurrentLng(longitude);
       loadSatelliteImage(latitude, longitude, zoomLevel);
-    } 
+    }
     // Otherwise, try to geocode the address
     else if (address && address !== DEFAULT_ADDRESS) {
       geocodeAddress(address);
     } else {
       setIsLoading(false);
       Alert.alert(
-        "No Location Data", 
-        "Please provide an address or coordinates to load the satellite view."
+        "No Location Data",
+        "Please provide an address or coordinates to load the satellite view.",
       );
     }
   }, [propertyId]);
@@ -133,13 +628,14 @@ const PropertyOutlineTool = ({
   const loadSavedOutlines = async (propId: string) => {
     try {
       const { data, error } = await supabase
-        .from('property_outlines')
-        .select('*')
-        .eq('property_id', propId)
+        .from("property_outlines")
+        .select("*")
+        .eq("property_id", propId)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('Error loading outlines:', error);
+      if (error && error.code !== "PGRST116") {
+        // PGRST116 = no rows returned
+        console.error("Error loading outlines:", error);
         return;
       }
 
@@ -154,7 +650,7 @@ const PropertyOutlineTool = ({
         }
       }
     } catch (error) {
-      console.error('Error loading saved outlines:', error);
+      console.error("Error loading saved outlines:", error);
     }
   };
 
@@ -167,7 +663,7 @@ const PropertyOutlineTool = ({
 
     try {
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${googleMapsApiKey}`
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addr)}&key=${googleMapsApiKey}`,
       );
       const data = await response.json();
 
@@ -195,26 +691,32 @@ const PropertyOutlineTool = ({
       return;
     }
 
-    console.log("Loading satellite image with API key:", googleMapsApiKey.substring(0, 10) + "...");
-    
+    console.log(
+      "Loading satellite image with API key:",
+      googleMapsApiKey.substring(0, 10) + "...",
+    );
+
     // Round dimensions to integers for Google Maps Static API
     const width = Math.round(MAP_WIDTH);
     const height = Math.round(MAP_HEIGHT);
-    
+
     // Google Maps Static API with satellite imagery
     const imageUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&maptype=satellite&key=${googleMapsApiKey}`;
-    
-    console.log("Satellite image URL:", imageUrl.replace(googleMapsApiKey, "API_KEY_HIDDEN"));
-    
+
+    console.log(
+      "Satellite image URL:",
+      imageUrl.replace(googleMapsApiKey, "API_KEY_HIDDEN"),
+    );
+
     setSatelliteImageUrl(imageUrl);
-    
+
     // Calculate scale based on zoom level
     // At zoom 20: ~1 pixel = 0.3 feet
     // At zoom 19: ~1 pixel = 0.6 feet
     // At zoom 18: ~1 pixel = 1.2 feet
     const pixelsPerFoot = Math.pow(2, zoom - 18) * 0.83;
     setScale(pixelsPerFoot);
-    
+
     setIsLoading(false);
   };
 
@@ -244,7 +746,7 @@ const PropertyOutlineTool = ({
   };
 
   const getNextStructureName = (type: string, label: string): string => {
-    const sameTypeStructures = structures.filter(s => s.type === type);
+    const sameTypeStructures = structures.filter((s) => s.type === type);
     if (sameTypeStructures.length === 0) {
       return label;
     }
@@ -252,7 +754,10 @@ const PropertyOutlineTool = ({
   };
 
   const startDrawing = () => {
-    const nextName = getNextStructureName(selectedType.type, selectedType.label);
+    const nextName = getNextStructureName(
+      selectedType.type,
+      selectedType.label,
+    );
     setPendingStructureName(nextName);
     setShowNameModal(true);
   };
@@ -274,67 +779,79 @@ const PropertyOutlineTool = ({
   const snapToRightAngle = (newPoint: Point, previousPoint: Point): Point => {
     const dx = newPoint.x - previousPoint.x;
     const dy = newPoint.y - previousPoint.y;
-    
+
     // Calculate angle in degrees
     const angleRad = Math.atan2(dy, dx);
-    const angleDeg = angleRad * 180 / Math.PI;
-    
+    const angleDeg = (angleRad * 180) / Math.PI;
+
     // Normalize angle to 0-360
     const normalizedAngle = ((angleDeg % 360) + 360) % 360;
-    
+
     // Check if close to horizontal (0° or 180°)
-    if (Math.abs(normalizedAngle) <= SNAP_ANGLE_THRESHOLD || 
-        Math.abs(normalizedAngle - 180) <= SNAP_ANGLE_THRESHOLD ||
-        Math.abs(normalizedAngle - 360) <= SNAP_ANGLE_THRESHOLD) {
+    if (
+      Math.abs(normalizedAngle) <= SNAP_ANGLE_THRESHOLD ||
+      Math.abs(normalizedAngle - 180) <= SNAP_ANGLE_THRESHOLD ||
+      Math.abs(normalizedAngle - 360) <= SNAP_ANGLE_THRESHOLD
+    ) {
       // Snap to horizontal
       return { x: newPoint.x, y: previousPoint.y };
     }
-    
+
     // Check if close to vertical (90° or 270°)
-    if (Math.abs(normalizedAngle - 90) <= SNAP_ANGLE_THRESHOLD || 
-        Math.abs(normalizedAngle - 270) <= SNAP_ANGLE_THRESHOLD) {
+    if (
+      Math.abs(normalizedAngle - 90) <= SNAP_ANGLE_THRESHOLD ||
+      Math.abs(normalizedAngle - 270) <= SNAP_ANGLE_THRESHOLD
+    ) {
       // Snap to vertical
       return { x: previousPoint.x, y: newPoint.y };
     }
-    
+
     // No snap needed
     return newPoint;
   };
 
   const addPoint = (x: number, y: number) => {
     if (!activeStructure) {
-      console.log('addPoint called but no activeStructure');
+      console.log("addPoint called but no activeStructure");
       return;
     }
 
-    console.log('addPoint called with:', { x, y, currentPoints: activeStructure.points.length });
+    console.log("addPoint called with:", {
+      x,
+      y,
+      currentPoints: activeStructure.points.length,
+    });
 
     let newPoint = { x, y };
-    
+
     // Apply snap-to-90° if there's a previous point
     if (activeStructure.points.length > 0) {
-      const previousPoint = activeStructure.points[activeStructure.points.length - 1];
+      const previousPoint =
+        activeStructure.points[activeStructure.points.length - 1];
       newPoint = snapToRightAngle(newPoint, previousPoint);
-      console.log('Snapped point:', newPoint);
+      console.log("Snapped point:", newPoint);
     }
 
     const updatedStructure = {
       ...activeStructure,
       points: [...activeStructure.points, newPoint],
     };
-    
-    console.log('Updated structure points:', updatedStructure.points);
+
+    console.log("Updated structure points:", updatedStructure.points);
     setActiveStructure(updatedStructure);
   };
 
   const completeStructure = () => {
     if (!activeStructure || activeStructure.points.length < 3) {
-      Alert.alert("Error", "Please add at least 3 points to complete the outline");
+      Alert.alert(
+        "Error",
+        "Please add at least 3 points to complete the outline",
+      );
       return;
     }
 
-    console.log('Completing structure with points:', activeStructure.points);
-    
+    console.log("Completing structure with points:", activeStructure.points);
+
     setStructures([...structures, activeStructure]);
     setActiveStructure(null);
     setIsDrawing(false);
@@ -348,13 +865,13 @@ const PropertyOutlineTool = ({
   };
 
   const deleteStructure = (id: string) => {
-    setStructures(structures.filter(s => s.id !== id));
+    setStructures(structures.filter((s) => s.id !== id));
   };
 
   const toggleStructureVisibility = (id: string) => {
-    setStructures(structures.map(s => 
-      s.id === id ? { ...s, visible: !s.visible } : s
-    ));
+    setStructures(
+      structures.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s)),
+    );
   };
 
   const startEditingLabel = (structure: Structure) => {
@@ -364,9 +881,11 @@ const PropertyOutlineTool = ({
 
   const saveLabel = (id: string) => {
     if (editingLabel.trim()) {
-      setStructures(structures.map(s => 
-        s.id === id ? { ...s, label: editingLabel.trim() } : s
-      ));
+      setStructures(
+        structures.map((s) =>
+          s.id === id ? { ...s, label: editingLabel.trim() } : s,
+        ),
+      );
     }
     setEditingStructureId(null);
     setEditingLabel("");
@@ -379,7 +898,7 @@ const PropertyOutlineTool = ({
 
   const calculateDistance = (p1: Point, p2: Point): number => {
     const pixelDistance = Math.sqrt(
-      Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)
+      Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2),
     );
     return pixelDistance / scale; // Convert to feet
   };
@@ -395,7 +914,7 @@ const PropertyOutlineTool = ({
 
   const calculateArea = (points: Point[]): number => {
     if (points.length < 3) return 0;
-    
+
     // Shoelace formula for polygon area
     let area = 0;
     for (let i = 0; i < points.length; i++) {
@@ -404,7 +923,7 @@ const PropertyOutlineTool = ({
       area -= points[j].x * points[i].y;
     }
     area = Math.abs(area) / 2;
-    
+
     // Convert from square pixels to square feet
     return area / (scale * scale);
   };
@@ -420,15 +939,15 @@ const PropertyOutlineTool = ({
     // For now, we'll return a placeholder
     const exportData = {
       satelliteImageUrl,
-      structures: structures.map(s => ({
+      structures: structures.map((s) => ({
         ...s,
         measurements: {
           area: calculateArea(s.points).toFixed(2),
           perimeter: calculatePerimeter(s.points).toFixed(2),
-        }
+        },
       })),
     };
-    
+
     return JSON.stringify(exportData);
   };
 
@@ -436,37 +955,40 @@ const PropertyOutlineTool = ({
     console.log("=== PropertyOutlineTool handleSave ===");
     console.log("propertyId prop:", propertyId);
     console.log("structures:", structures);
-    
+
     if (!propertyId) {
       console.log("❌ No propertyId provided");
       Alert.alert(
         "Complete Property ID First",
         "Please complete and save the Property ID section before using the Property Outline Tool.",
-        [{ text: "OK" }]
+        [{ text: "OK" }],
       );
       return;
     }
 
     console.log("✅ propertyId is available:", propertyId);
-    
+
     if (structures.length === 0) {
-      console.log('No structures to save');
-      Alert.alert("Error", "No structures to save. Please draw at least one outline.");
+      console.log("No structures to save");
+      Alert.alert(
+        "Error",
+        "No structures to save. Please draw at least one outline.",
+      );
       return;
     }
 
-    console.log('Starting save process...');
-    
+    console.log("Starting save process...");
+
     try {
       // Check if outlines already exist for this property
-      console.log('Checking for existing outlines...');
+      console.log("Checking for existing outlines...");
       const { data: existing, error: checkError } = await supabase
-        .from('property_outlines')
-        .select('id')
-        .eq('property_id', propertyId)
+        .from("property_outlines")
+        .select("id")
+        .eq("property_id", propertyId)
         .maybeSingle();
 
-      console.log('Existing check result:', { existing, checkError });
+      console.log("Existing check result:", { existing, checkError });
 
       const outlineData = {
         property_id: propertyId,
@@ -478,77 +1000,78 @@ const PropertyOutlineTool = ({
         updated_at: new Date().toISOString(),
       };
 
-      console.log('Outline data to save:', outlineData);
+      console.log("Outline data to save:", outlineData);
 
       let result;
       if (existing) {
         // Update existing outlines
-        console.log('Updating existing outlines...');
+        console.log("Updating existing outlines...");
         result = await supabase
-          .from('property_outlines')
+          .from("property_outlines")
           .update(outlineData)
-          .eq('property_id', propertyId);
+          .eq("property_id", propertyId);
       } else {
         // Insert new outlines
-        console.log('Inserting new outlines...');
-        result = await supabase
-          .from('property_outlines')
-          .insert(outlineData);
+        console.log("Inserting new outlines...");
+        result = await supabase.from("property_outlines").insert(outlineData);
       }
 
-      console.log('Save result:', result);
+      console.log("Save result:", result);
 
       if (result.error) {
-        console.error('Error saving outlines:', result.error);
-        Alert.alert("Error", `Failed to save outlines: ${result.error.message}`);
+        console.error("Error saving outlines:", result.error);
+        Alert.alert(
+          "Error",
+          `Failed to save outlines: ${result.error.message}`,
+        );
         return;
       }
 
-      console.log('Save successful!');
+      console.log("Save successful!");
       Alert.alert("Success", "Property outlines saved successfully!");
-      
+
       // Call the onSave callback if provided
       const exportedImage = await exportImage();
       onSave(structures, exportedImage);
     } catch (error) {
-      console.error('Error saving outlines:', error);
+      console.error("Error saving outlines:", error);
       Alert.alert("Error", `Failed to save outlines: ${error}`);
     }
   };
 
   const isNearFirstPoint = (x: number, y: number): boolean => {
     if (!activeStructure || activeStructure.points.length < 3) return false;
-    
+
     const firstPoint = activeStructure.points[0];
     const distance = Math.sqrt(
-      Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2)
+      Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2),
     );
-    
+
     const isNear = distance <= CLOSE_THRESHOLD;
-    
-    console.log('Checking distance to first point:', {
+
+    console.log("Checking distance to first point:", {
       touchPoint: { x, y },
       firstPoint,
       distance,
       threshold: CLOSE_THRESHOLD,
       isNear,
-      currentPointsCount: activeStructure.points.length
+      currentPointsCount: activeStructure.points.length,
     });
-    
+
     return isNear;
   };
 
   const handleMapLayout = (event: any) => {
     const { x, y } = event.nativeEvent.layout;
     setMapLayout({ x, y });
-    console.log('Map layout:', { x, y });
+    console.log("Map layout:", { x, y });
   };
 
   const renderMap = () => {
     if (!address) return null;
 
     const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(
-      address
+      address,
     )}&zoom=${DEFAULT_ZOOM}&size=${MAP_WIDTH}x${MAP_HEIGHT}&maptype=satellite&key=${googleMapsApiKey}`;
 
     return (
@@ -558,8 +1081,8 @@ const PropertyOutlineTool = ({
           style={{
             width: MAP_WIDTH,
             height: MAP_HEIGHT,
-            position: 'relative',
-            backgroundColor: '#e0e0e0',
+            position: "relative",
+            backgroundColor: "#e0e0e0",
           }}
         >
           <Image
@@ -567,161 +1090,204 @@ const PropertyOutlineTool = ({
             style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}
             resizeMode="cover"
           />
-          
+
           {/* Drawing overlay using Pressable instead of responder system */}
           <Pressable
             onPress={(event) => {
               if (!isDrawing || !activeStructure) return;
-              
+
               // Prevent multiple rapid touches
               if (isAddingPointRef.current) {
-                console.log('Ignoring touch - already processing a point');
+                console.log("Ignoring touch - already processing a point");
                 return;
               }
-              
+
               isAddingPointRef.current = true;
-              
+
               const { locationX, locationY } = event.nativeEvent;
-              
-              console.log('Pressable touch:', { locationX, locationY });
-              
+
+              console.log("Pressable touch:", { locationX, locationY });
+
               // Validate coordinates
-              if (locationX == null || locationY == null || 
-                  typeof locationX !== 'number' || typeof locationY !== 'number' || 
-                  isNaN(locationX) || isNaN(locationY) ||
-                  locationX < 0 || locationX > MAP_WIDTH || 
-                  locationY < 0 || locationY > MAP_HEIGHT) {
-                console.log('Invalid touch, ignoring');
+              if (
+                locationX == null ||
+                locationY == null ||
+                typeof locationX !== "number" ||
+                typeof locationY !== "number" ||
+                isNaN(locationX) ||
+                isNaN(locationY) ||
+                locationX < 0 ||
+                locationX > MAP_WIDTH ||
+                locationY < 0 ||
+                locationY > MAP_HEIGHT
+              ) {
+                console.log("Invalid touch, ignoring");
                 isAddingPointRef.current = false;
                 return;
               }
-              
-              console.log('Valid touch at:', locationX, locationY);
-              
+
+              console.log("Valid touch at:", locationX, locationY);
+
               // Check if closing polygon
               if (isNearFirstPoint(locationX, locationY)) {
-                console.log('Closing polygon');
+                console.log("Closing polygon");
                 completeStructure();
                 isAddingPointRef.current = false;
                 return;
               }
-              
+
               // Add point
               addPoint(locationX, locationY);
-              
+
               setTimeout(() => {
                 isAddingPointRef.current = false;
               }, 150);
             }}
             style={{
-              position: 'absolute',
+              position: "absolute",
               top: 0,
               left: 0,
               width: MAP_WIDTH,
               height: MAP_HEIGHT,
             }}
           >
-            <Svg width={MAP_WIDTH} height={MAP_HEIGHT} style={{ position: 'absolute' }}>
+            <Svg
+              width={MAP_WIDTH}
+              height={MAP_HEIGHT}
+              style={{ position: "absolute" }}
+            >
               {/* Draw completed structures */}
-              {structures.filter(s => s.visible).map((structure) => (
-                <View key={structure.id}>
-                  {/* Draw lines between points */}
-                  {structure.points.map((point, index) => {
-                    const nextPoint = structure.points[(index + 1) % structure.points.length];
-                    const angle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x) * 180 / Math.PI;
-                    const length = Math.sqrt(
-                      Math.pow(nextPoint.x - point.x, 2) + Math.pow(nextPoint.y - point.y, 2)
-                    );
-                    const distance = calculateDistance(point, nextPoint);
-                    const midpoint = getMidpoint(point, nextPoint);
-                    
-                    return (
-                      <View key={`line-${index}`}>
-                        <Path
-                          d={`M${point.x},${point.y} L${nextPoint.x},${nextPoint.y}`}
-                          stroke={structure.color}
-                          strokeWidth={3}
-                          fill="none"
-                          strokeLinecap="round"
-                        />
-                        {showMeasurements && (
-                          <View
-                            style={{
-                              position: 'absolute',
-                              left: midpoint.x - 25,
-                              top: midpoint.y - 12,
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                              paddingHorizontal: 6,
-                              paddingVertical: 2,
-                              borderRadius: 4,
-                              borderWidth: 1,
-                              borderColor: structure.color,
-                            }}
-                          >
-                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
-                              {distance.toFixed(1)}'
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                  
-                  {/* Draw points */}
-                  {structure.points.map((point, index) => (
-                    <Circle
-                      key={`point-${index}`}
-                      cx={point.x}
-                      cy={point.y}
-                      r={6}
-                      fill={structure.color}
-                      stroke="#fff"
-                      strokeWidth={2}
-                    />
-                  ))}
+              {structures
+                .filter((s) => s.visible)
+                .map((structure) => (
+                  <View key={structure.id}>
+                    {/* Draw lines between points */}
+                    {structure.points.map((point, index) => {
+                      const nextPoint =
+                        structure.points[(index + 1) % structure.points.length];
+                      const angle =
+                        (Math.atan2(
+                          nextPoint.y - point.y,
+                          nextPoint.x - point.x,
+                        ) *
+                          180) /
+                        Math.PI;
+                      const length = Math.sqrt(
+                        Math.pow(nextPoint.x - point.x, 2) +
+                          Math.pow(nextPoint.y - point.y, 2),
+                      );
+                      const distance = calculateDistance(point, nextPoint);
+                      const midpoint = getMidpoint(point, nextPoint);
 
-                  {/* Show total perimeter and area */}
-                  {showMeasurements && structure.points.length >= 3 && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        left: structure.points[0].x + 10,
-                        top: structure.points[0].y - 40,
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        padding: 6,
-                        borderRadius: 6,
-                        borderWidth: 2,
-                        borderColor: structure.color,
-                      }}
-                    >
-                      <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#000' }}>
-                        {structure.label}
-                      </Text>
-                      <Text style={{ fontSize: 10, color: '#000' }}>
-                        Perimeter: {calculatePerimeter(structure.points).toFixed(1)}'
-                      </Text>
-                      <Text style={{ fontSize: 10, color: '#000' }}>
-                        Area: {calculateArea(structure.points).toFixed(0)} sq ft
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-              
+                      return (
+                        <View key={`line-${index}`}>
+                          <Path
+                            d={`M${point.x},${point.y} L${nextPoint.x},${nextPoint.y}`}
+                            stroke={structure.color}
+                            strokeWidth={3}
+                            fill="none"
+                            strokeLinecap="round"
+                          />
+                          {showMeasurements && (
+                            <View
+                              style={{
+                                position: "absolute",
+                                left: midpoint.x - 25,
+                                top: midpoint.y - 12,
+                                backgroundColor: "rgba(255, 255, 255, 0.95)",
+                                paddingHorizontal: 6,
+                                paddingVertical: 2,
+                                borderRadius: 4,
+                                borderWidth: 1,
+                                borderColor: structure.color,
+                              }}
+                            >
+                              <Text
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: "bold",
+                                  color: "#000",
+                                }}
+                              >
+                                {distance.toFixed(1)}'
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+
+                    {/* Draw points */}
+                    {structure.points.map((point, index) => (
+                      <Circle
+                        key={`point-${index}`}
+                        cx={point.x}
+                        cy={point.y}
+                        r={6}
+                        fill={structure.color}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      />
+                    ))}
+
+                    {/* Show total perimeter and area */}
+                    {showMeasurements && structure.points.length >= 3 && (
+                      <View
+                        style={{
+                          position: "absolute",
+                          left: structure.points[0].x + 10,
+                          top: structure.points[0].y - 40,
+                          backgroundColor: "rgba(255, 255, 255, 0.95)",
+                          padding: 6,
+                          borderRadius: 6,
+                          borderWidth: 2,
+                          borderColor: structure.color,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: 11,
+                            fontWeight: "bold",
+                            color: "#000",
+                          }}
+                        >
+                          {structure.label}
+                        </Text>
+                        <Text style={{ fontSize: 10, color: "#000" }}>
+                          Perimeter:{" "}
+                          {calculatePerimeter(structure.points).toFixed(1)}'
+                        </Text>
+                        <Text style={{ fontSize: 10, color: "#000" }}>
+                          Area: {calculateArea(structure.points).toFixed(0)} sq
+                          ft
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+
               {/* Draw active structure being drawn */}
               {activeStructure && activeStructure.points.length > 0 && (
                 <View>
                   {/* Draw lines between points */}
                   {activeStructure.points.map((point, index) => {
-                    if (index === activeStructure.points.length - 1) return null;
+                    if (index === activeStructure.points.length - 1)
+                      return null;
                     const nextPoint = activeStructure.points[index + 1];
-                    const angle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x) * 180 / Math.PI;
+                    const angle =
+                      (Math.atan2(
+                        nextPoint.y - point.y,
+                        nextPoint.x - point.x,
+                      ) *
+                        180) /
+                      Math.PI;
                     const length = Math.sqrt(
-                      Math.pow(nextPoint.x - point.x, 2) + Math.pow(nextPoint.y - point.y, 2)
+                      Math.pow(nextPoint.x - point.x, 2) +
+                        Math.pow(nextPoint.y - point.y, 2),
                     );
                     const distance = calculateDistance(point, nextPoint);
                     const midpoint = getMidpoint(point, nextPoint);
-                    
+
                     return (
                       <View key={`active-line-${index}`}>
                         <Path
@@ -735,10 +1301,10 @@ const PropertyOutlineTool = ({
                         {showMeasurements && (
                           <View
                             style={{
-                              position: 'absolute',
+                              position: "absolute",
                               left: midpoint.x - 25,
                               top: midpoint.y - 12,
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                              backgroundColor: "rgba(255, 255, 255, 0.95)",
                               paddingHorizontal: 6,
                               paddingVertical: 2,
                               borderRadius: 4,
@@ -746,7 +1312,13 @@ const PropertyOutlineTool = ({
                               borderColor: selectedType.color,
                             }}
                           >
-                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
+                            <Text
+                              style={{
+                                fontSize: 10,
+                                fontWeight: "bold",
+                                color: "#000",
+                              }}
+                            >
                               {distance.toFixed(1)}'
                             </Text>
                           </View>
@@ -767,19 +1339,32 @@ const PropertyOutlineTool = ({
                       strokeWidth={3}
                     />
                   ))}
-                  
+
                   {/* Preview line from last point to cursor */}
                   {previewPoint && activeStructure.points.length > 0 && (
                     <View>
                       {(() => {
-                        const lastPoint = activeStructure.points[activeStructure.points.length - 1];
-                        const angle = Math.atan2(previewPoint.y - lastPoint.y, previewPoint.x - lastPoint.x) * 180 / Math.PI;
+                        const lastPoint =
+                          activeStructure.points[
+                            activeStructure.points.length - 1
+                          ];
+                        const angle =
+                          (Math.atan2(
+                            previewPoint.y - lastPoint.y,
+                            previewPoint.x - lastPoint.x,
+                          ) *
+                            180) /
+                          Math.PI;
                         const length = Math.sqrt(
-                          Math.pow(previewPoint.x - lastPoint.x, 2) + Math.pow(previewPoint.y - lastPoint.y, 2)
+                          Math.pow(previewPoint.x - lastPoint.x, 2) +
+                            Math.pow(previewPoint.y - lastPoint.y, 2),
                         );
-                        const distance = calculateDistance(lastPoint, previewPoint);
+                        const distance = calculateDistance(
+                          lastPoint,
+                          previewPoint,
+                        );
                         const midpoint = getMidpoint(lastPoint, previewPoint);
-                        
+
                         return (
                           <>
                             {/* Dashed preview line */}
@@ -806,10 +1391,10 @@ const PropertyOutlineTool = ({
                             {showMeasurements && (
                               <View
                                 style={{
-                                  position: 'absolute',
+                                  position: "absolute",
                                   left: midpoint.x - 25,
                                   top: midpoint.y - 12,
-                                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                  backgroundColor: "rgba(255, 255, 255, 0.9)",
                                   paddingHorizontal: 6,
                                   paddingVertical: 2,
                                   borderRadius: 4,
@@ -818,7 +1403,13 @@ const PropertyOutlineTool = ({
                                   opacity: 0.8,
                                 }}
                               >
-                                <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
+                                <Text
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: "bold",
+                                    color: "#000",
+                                  }}
+                                >
                                   {distance.toFixed(1)}'
                                 </Text>
                               </View>
@@ -828,7 +1419,7 @@ const PropertyOutlineTool = ({
                       })()}
                     </View>
                   )}
-                  
+
                   {/* First point indicator (clickable to close) */}
                   {activeStructure && activeStructure.points.length >= 3 && (
                     <>
@@ -847,13 +1438,15 @@ const PropertyOutlineTool = ({
                         fill="#22c55e"
                         onPress={(e) => {
                           e.stopPropagation?.();
-                          console.log('*** FIRST POINT CIRCLE CLICKED - CLOSING POLYGON ***');
+                          console.log(
+                            "*** FIRST POINT CIRCLE CLICKED - CLOSING POLYGON ***",
+                          );
                           completeStructure();
                         }}
                       />
                     </>
                   )}
-                  
+
                   {/* Highlight first point when you have 3+ points */}
                   {activeStructure.points.length >= 3 && (
                     <Circle
@@ -870,42 +1463,52 @@ const PropertyOutlineTool = ({
               )}
             </Svg>
           </Pressable>
-          
+
           {/* Separate Pressable overlay for closing the polygon - sits on top */}
-          {isDrawing && activeStructure && activeStructure.points.length >= 3 && (
-            <Pressable
-              onPressIn={(e) => {
-                e.stopPropagation();
-                console.log('*** CLOSE BUTTON PRESSED - COMPLETING STRUCTURE ***');
-                completeStructure();
-              }}
-              onPress={(e) => {
-                e.stopPropagation();
-              }}
-              style={{
-                position: 'absolute',
-                left: activeStructure.points[0].x - CLOSE_THRESHOLD,
-                top: activeStructure.points[0].y - CLOSE_THRESHOLD,
-                width: CLOSE_THRESHOLD * 2,
-                height: CLOSE_THRESHOLD * 2,
-                borderRadius: CLOSE_THRESHOLD,
-                backgroundColor: 'rgba(34, 197, 94, 0.3)',
-                borderWidth: 2,
-                borderColor: '#22c55e',
-                zIndex: 1000,
-              }}
-            >
-              <View style={{
-                width: '100%',
-                height: '100%',
-                borderRadius: CLOSE_THRESHOLD,
-                justifyContent: 'center',
-                alignItems: 'center',
-              }}>
-                <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 12 }}>CLOSE</Text>
-              </View>
-            </Pressable>
-          )}
+          {isDrawing &&
+            activeStructure &&
+            activeStructure.points.length >= 3 && (
+              <Pressable
+                onPressIn={(e) => {
+                  e.stopPropagation();
+                  console.log(
+                    "*** CLOSE BUTTON PRESSED - COMPLETING STRUCTURE ***",
+                  );
+                  completeStructure();
+                }}
+                onPress={(e) => {
+                  e.stopPropagation();
+                }}
+                style={{
+                  position: "absolute",
+                  left: activeStructure.points[0].x - CLOSE_THRESHOLD,
+                  top: activeStructure.points[0].y - CLOSE_THRESHOLD,
+                  width: CLOSE_THRESHOLD * 2,
+                  height: CLOSE_THRESHOLD * 2,
+                  borderRadius: CLOSE_THRESHOLD,
+                  backgroundColor: "rgba(34, 197, 94, 0.3)",
+                  borderWidth: 2,
+                  borderColor: "#22c55e",
+                  zIndex: 1000,
+                }}
+              >
+                <View
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    borderRadius: CLOSE_THRESHOLD,
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontWeight: "bold", fontSize: 12 }}
+                  >
+                    CLOSE
+                  </Text>
+                </View>
+              </Pressable>
+            )}
         </View>
       </View>
     );
@@ -913,20 +1516,21 @@ const PropertyOutlineTool = ({
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
-      
+      <StatusBar
+        barStyle={isDark ? "light-content" : "dark-content"}
+        backgroundColor={theme.headerBg}
+      />
+
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          Property Outline Tool
-        </Text>
+        <Text style={styles.headerTitle}>Property Outline Tool</Text>
         <View style={styles.addressRow}>
           <TextInput
             style={styles.addressInput}
             value={addressInput}
             onChangeText={setAddressInput}
             placeholder="Enter address..."
-            placeholderTextColor="#9ca3af"
+            placeholderTextColor={theme.placeholder}
           />
           <TouchableOpacity
             onPress={handleRefreshLocation}
@@ -954,17 +1558,18 @@ const PropertyOutlineTool = ({
                 style={[
                   styles.typeButton,
                   selectedType.type === type.type && styles.typeButtonActive,
-                  { borderColor: type.color }
+                  { borderColor: type.color },
                 ]}
               >
-                <Icon 
-                  size={20} 
-                  color={selectedType.type === type.type ? '#fff' : type.color} 
+                <Icon
+                  size={20}
+                  color={selectedType.type === type.type ? "#fff" : type.color}
                 />
-                <Text 
+                <Text
                   style={[
                     styles.typeButtonText,
-                    selectedType.type === type.type && styles.typeButtonTextActive
+                    selectedType.type === type.type &&
+                      styles.typeButtonTextActive,
                   ]}
                 >
                   {type.label}
@@ -981,10 +1586,12 @@ const PropertyOutlineTool = ({
           onPress={() => setShowMeasurements(!showMeasurements)}
           style={styles.measurementsRow}
         >
-          <View style={[
-            styles.checkbox,
-            showMeasurements && styles.checkboxChecked
-          ]}>
+          <View
+            style={[
+              styles.checkbox,
+              showMeasurements && styles.checkboxChecked,
+            ]}
+          >
             {showMeasurements && <Check size={16} color="#fff" />}
           </View>
           <Text style={styles.measurementsText}>Show Measurements</Text>
@@ -1005,7 +1612,7 @@ const PropertyOutlineTool = ({
             </Text>
           </View>
         ) : (
-          <View style={{ width: MAP_WIDTH, position: 'relative' }}>
+          <View style={{ width: MAP_WIDTH, position: "relative" }}>
             {/* Zoom Controls */}
             <View style={styles.zoomControls}>
               <TouchableOpacity
@@ -1024,10 +1631,14 @@ const PropertyOutlineTool = ({
               </TouchableOpacity>
             </View>
 
-            <View 
+            <View
               ref={mapContainerRef}
               onLayout={handleMapLayout}
-              style={{ position: 'relative', width: MAP_WIDTH, height: MAP_HEIGHT }}
+              style={{
+                position: "relative",
+                width: MAP_WIDTH,
+                height: MAP_HEIGHT,
+              }}
             >
               <Image
                 source={{ uri: satelliteImageUrl }}
@@ -1035,45 +1646,55 @@ const PropertyOutlineTool = ({
                 resizeMode="cover"
                 onError={(error) => {
                   console.error("Image load error:", error.nativeEvent.error);
-                  Alert.alert("Error", "Failed to load satellite imagery. Please check your internet connection.");
+                  Alert.alert(
+                    "Error",
+                    "Failed to load satellite imagery. Please check your internet connection.",
+                  );
                 }}
                 onLoad={() => {
                   console.log("Satellite image loaded successfully!");
                 }}
               />
-              
+
               <Pressable
                 onPress={(event) => {
                   const touch = event.nativeEvent;
                   const x = touch.locationX;
                   const y = touch.locationY;
 
-                  console.log('=== PRESS EVENT ===');
-                  console.log('Pressable touch:', { locationX: x, locationY: y });
+                  console.log("=== PRESS EVENT ===");
+                  console.log("Pressable touch:", {
+                    locationX: x,
+                    locationY: y,
+                  });
 
                   // Validate touch is within map bounds
                   if (x < 0 || y < 0 || x > MAP_WIDTH || y > MAP_HEIGHT) {
-                    console.log('Touch outside map bounds, ignoring');
+                    console.log("Touch outside map bounds, ignoring");
                     return;
                   }
 
-                  console.log('Valid touch at:', x, y);
+                  console.log("Valid touch at:", x, y);
 
                   if (!isDrawing) {
-                    console.log('Not in drawing mode, ignoring touch');
+                    console.log("Not in drawing mode, ignoring touch");
                     return;
                   }
 
-                  console.log('Current points count:', activeStructure?.points.length || 0);
+                  console.log(
+                    "Current points count:",
+                    activeStructure?.points.length || 0,
+                  );
 
                   // Check if we should close the structure
                   if (activeStructure && activeStructure.points.length >= 3) {
                     const firstPoint = activeStructure.points[0];
                     const distance = Math.sqrt(
-                      Math.pow(x - firstPoint.x, 2) + Math.pow(y - firstPoint.y, 2)
+                      Math.pow(x - firstPoint.x, 2) +
+                        Math.pow(y - firstPoint.y, 2),
                     );
 
-                    console.log('Checking distance to first point:', {
+                    console.log("Checking distance to first point:", {
                       touchPoint: { x, y },
                       firstPoint,
                       distance,
@@ -1083,64 +1704,74 @@ const PropertyOutlineTool = ({
                     });
 
                     if (distance <= CLOSE_THRESHOLD) {
-                      console.log('Close to first point, completing structure');
+                      console.log("Close to first point, completing structure");
                       completeStructure();
                       return;
                     }
                   }
 
-                  console.log('Adding new point');
+                  console.log("Adding new point");
                   addPoint(x, y);
                 }}
                 style={{
-                  position: 'absolute',
+                  position: "absolute",
                   top: 0,
                   left: 0,
                   width: MAP_WIDTH,
                   height: MAP_HEIGHT,
-                  backgroundColor: 'transparent',
+                  backgroundColor: "transparent",
                 }}
               >
-                <Svg width={MAP_WIDTH} height={MAP_HEIGHT} style={{ position: 'absolute' }}>
+                <Svg
+                  width={MAP_WIDTH}
+                  height={MAP_HEIGHT}
+                  style={{ position: "absolute" }}
+                >
                   {/* Draw completed structures */}
-                  {structures.filter(s => s.visible).map((structure) => (
-                    <React.Fragment key={structure.id}>
-                      {/* Draw lines between points */}
-                      {structure.points.map((point, index) => {
-                        const nextPoint = structure.points[(index + 1) % structure.points.length];
-                        return (
-                          <Path
-                            key={`line-${index}`}
-                            d={`M${point.x},${point.y} L${nextPoint.x},${nextPoint.y}`}
-                            stroke={structure.color}
-                            strokeWidth={3}
-                            fill="none"
-                            strokeLinecap="round"
+                  {structures
+                    .filter((s) => s.visible)
+                    .map((structure) => (
+                      <React.Fragment key={structure.id}>
+                        {/* Draw lines between points */}
+                        {structure.points.map((point, index) => {
+                          const nextPoint =
+                            structure.points[
+                              (index + 1) % structure.points.length
+                            ];
+                          return (
+                            <Path
+                              key={`line-${index}`}
+                              d={`M${point.x},${point.y} L${nextPoint.x},${nextPoint.y}`}
+                              stroke={structure.color}
+                              strokeWidth={3}
+                              fill="none"
+                              strokeLinecap="round"
+                            />
+                          );
+                        })}
+
+                        {/* Draw points */}
+                        {structure.points.map((point, index) => (
+                          <Circle
+                            key={`point-${index}`}
+                            cx={point.x}
+                            cy={point.y}
+                            r={6}
+                            fill={structure.color}
+                            stroke="#fff"
+                            strokeWidth={2}
                           />
-                        );
-                      })}
-                      
-                      {/* Draw points */}
-                      {structure.points.map((point, index) => (
-                        <Circle
-                          key={`point-${index}`}
-                          cx={point.x}
-                          cy={point.y}
-                          r={6}
-                          fill={structure.color}
-                          stroke="#fff"
-                          strokeWidth={2}
-                        />
-                      ))}
-                    </React.Fragment>
-                  ))}
-                  
+                        ))}
+                      </React.Fragment>
+                    ))}
+
                   {/* Draw active structure being drawn */}
                   {activeStructure && activeStructure.points.length > 0 && (
                     <React.Fragment>
                       {/* Draw lines between points */}
                       {activeStructure.points.map((point, index) => {
-                        if (index === activeStructure.points.length - 1) return null;
+                        if (index === activeStructure.points.length - 1)
+                          return null;
                         const nextPoint = activeStructure.points[index + 1];
                         return (
                           <Path
@@ -1167,12 +1798,15 @@ const PropertyOutlineTool = ({
                           strokeWidth={3}
                         />
                       ))}
-                      
+
                       {/* Preview line from last point to cursor */}
                       {previewPoint && activeStructure.points.length > 0 && (
                         <React.Fragment>
                           {(() => {
-                            const lastPoint = activeStructure.points[activeStructure.points.length - 1];
+                            const lastPoint =
+                              activeStructure.points[
+                                activeStructure.points.length - 1
+                              ];
                             return (
                               <>
                                 {/* Dashed preview line */}
@@ -1200,109 +1834,130 @@ const PropertyOutlineTool = ({
                           })()}
                         </React.Fragment>
                       )}
-                      
+
                       {/* First point indicator (clickable to close) */}
-                      {activeStructure && activeStructure.points.length >= 3 && (
-                        <>
-                          <Circle
-                            cx={activeStructure.points[0].x}
-                            cy={activeStructure.points[0].y}
-                            r={CLOSE_THRESHOLD}
-                            fill="rgba(34, 197, 94, 0.2)"
-                            stroke="#22c55e"
-                            strokeWidth={2}
-                          />
-                          <Circle
-                            cx={activeStructure.points[0].x}
-                            cy={activeStructure.points[0].y}
-                            r={12}
-                            fill="transparent"
-                            stroke="#fff"
-                            strokeWidth={2}
-                            strokeDasharray="5,5"
-                          />
-                        </>
-                      )}
+                      {activeStructure &&
+                        activeStructure.points.length >= 3 && (
+                          <>
+                            <Circle
+                              cx={activeStructure.points[0].x}
+                              cy={activeStructure.points[0].y}
+                              r={CLOSE_THRESHOLD}
+                              fill="rgba(34, 197, 94, 0.2)"
+                              stroke="#22c55e"
+                              strokeWidth={2}
+                            />
+                            <Circle
+                              cx={activeStructure.points[0].x}
+                              cy={activeStructure.points[0].y}
+                              r={12}
+                              fill="transparent"
+                              stroke="#fff"
+                              strokeWidth={2}
+                              strokeDasharray="5,5"
+                            />
+                          </>
+                        )}
                     </React.Fragment>
                   )}
                 </Svg>
 
                 {/* Measurement labels - these need to be View elements */}
-                {structures.filter(s => s.visible).map((structure) => (
-                  <React.Fragment key={`labels-${structure.id}`}>
-                    {/* Draw measurement labels between points */}
-                    {structure.points.map((point, index) => {
-                      const nextPoint = structure.points[(index + 1) % structure.points.length];
-                      const distance = calculateDistance(point, nextPoint);
-                      const midpoint = getMidpoint(point, nextPoint);
-                      
-                      return showMeasurements ? (
+                {structures
+                  .filter((s) => s.visible)
+                  .map((structure) => (
+                    <React.Fragment key={`labels-${structure.id}`}>
+                      {/* Draw measurement labels between points */}
+                      {structure.points.map((point, index) => {
+                        const nextPoint =
+                          structure.points[
+                            (index + 1) % structure.points.length
+                          ];
+                        const distance = calculateDistance(point, nextPoint);
+                        const midpoint = getMidpoint(point, nextPoint);
+
+                        return showMeasurements ? (
+                          <View
+                            key={`label-${index}`}
+                            style={{
+                              position: "absolute",
+                              left: midpoint.x - 25,
+                              top: midpoint.y - 12,
+                              backgroundColor: "rgba(255, 255, 255, 0.95)",
+                              paddingHorizontal: 6,
+                              paddingVertical: 2,
+                              borderRadius: 4,
+                              borderWidth: 1,
+                              borderColor: structure.color,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 10,
+                                fontWeight: "bold",
+                                color: "#000",
+                              }}
+                            >
+                              {distance.toFixed(1)}'
+                            </Text>
+                          </View>
+                        ) : null;
+                      })}
+
+                      {/* Show total perimeter and area */}
+                      {showMeasurements && structure.points.length >= 3 && (
                         <View
-                          key={`label-${index}`}
                           style={{
-                            position: 'absolute',
-                            left: midpoint.x - 25,
-                            top: midpoint.y - 12,
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                            paddingHorizontal: 6,
-                            paddingVertical: 2,
-                            borderRadius: 4,
-                            borderWidth: 1,
+                            position: "absolute",
+                            left: structure.points[0].x + 10,
+                            top: structure.points[0].y - 40,
+                            backgroundColor: "rgba(255, 255, 255, 0.95)",
+                            padding: 6,
+                            borderRadius: 6,
+                            borderWidth: 2,
                             borderColor: structure.color,
                           }}
                         >
-                          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
-                            {distance.toFixed(1)}'
+                          <Text
+                            style={{
+                              fontSize: 11,
+                              fontWeight: "bold",
+                              color: "#000",
+                            }}
+                          >
+                            {structure.label}
+                          </Text>
+                          <Text style={{ fontSize: 10, color: "#000" }}>
+                            Perimeter:{" "}
+                            {calculatePerimeter(structure.points).toFixed(1)}'
+                          </Text>
+                          <Text style={{ fontSize: 10, color: "#000" }}>
+                            Area: {calculateArea(structure.points).toFixed(0)}{" "}
+                            sq ft
                           </Text>
                         </View>
-                      ) : null;
-                    })}
-
-                    {/* Show total perimeter and area */}
-                    {showMeasurements && structure.points.length >= 3 && (
-                      <View
-                        style={{
-                          position: 'absolute',
-                          left: structure.points[0].x + 10,
-                          top: structure.points[0].y - 40,
-                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                          padding: 6,
-                          borderRadius: 6,
-                          borderWidth: 2,
-                          borderColor: structure.color,
-                        }}
-                      >
-                        <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#000' }}>
-                          {structure.label}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: '#000' }}>
-                          Perimeter: {calculatePerimeter(structure.points).toFixed(1)}'
-                        </Text>
-                        <Text style={{ fontSize: 10, color: '#000' }}>
-                          Area: {calculateArea(structure.points).toFixed(0)} sq ft
-                        </Text>
-                      </View>
-                    )}
-                  </React.Fragment>
-                ))}
+                      )}
+                    </React.Fragment>
+                  ))}
 
                 {/* Active structure measurement labels */}
                 {activeStructure && activeStructure.points.length > 0 && (
                   <React.Fragment>
                     {activeStructure.points.map((point, index) => {
-                      if (index === activeStructure.points.length - 1) return null;
+                      if (index === activeStructure.points.length - 1)
+                        return null;
                       const nextPoint = activeStructure.points[index + 1];
                       const distance = calculateDistance(point, nextPoint);
                       const midpoint = getMidpoint(point, nextPoint);
-                      
+
                       return showMeasurements ? (
                         <View
                           key={`active-label-${index}`}
                           style={{
-                            position: 'absolute',
+                            position: "absolute",
                             left: midpoint.x - 25,
                             top: midpoint.y - 12,
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            backgroundColor: "rgba(255, 255, 255, 0.95)",
                             paddingHorizontal: 6,
                             paddingVertical: 2,
                             borderRadius: 4,
@@ -1310,7 +1965,13 @@ const PropertyOutlineTool = ({
                             borderColor: selectedType.color,
                           }}
                         >
-                          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
+                          <Text
+                            style={{
+                              fontSize: 10,
+                              fontWeight: "bold",
+                              color: "#000",
+                            }}
+                          >
                             {distance.toFixed(1)}'
                           </Text>
                         </View>
@@ -1318,19 +1979,27 @@ const PropertyOutlineTool = ({
                     })}
 
                     {/* Preview measurement */}
-                    {previewPoint && activeStructure.points.length > 0 && showMeasurements && (
+                    {previewPoint &&
+                      activeStructure.points.length > 0 &&
+                      showMeasurements &&
                       (() => {
-                        const lastPoint = activeStructure.points[activeStructure.points.length - 1];
-                        const distance = calculateDistance(lastPoint, previewPoint);
+                        const lastPoint =
+                          activeStructure.points[
+                            activeStructure.points.length - 1
+                          ];
+                        const distance = calculateDistance(
+                          lastPoint,
+                          previewPoint,
+                        );
                         const midpoint = getMidpoint(lastPoint, previewPoint);
-                        
+
                         return (
                           <View
                             style={{
-                              position: 'absolute',
+                              position: "absolute",
                               left: midpoint.x - 25,
                               top: midpoint.y - 12,
-                              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                              backgroundColor: "rgba(255, 255, 255, 0.9)",
                               paddingHorizontal: 6,
                               paddingVertical: 2,
                               borderRadius: 4,
@@ -1339,13 +2008,18 @@ const PropertyOutlineTool = ({
                               opacity: 0.8,
                             }}
                           >
-                            <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#000' }}>
+                            <Text
+                              style={{
+                                fontSize: 10,
+                                fontWeight: "bold",
+                                color: "#000",
+                              }}
+                            >
                               {distance.toFixed(1)}'
                             </Text>
                           </View>
                         );
-                      })()
-                    )}
+                      })()}
                   </React.Fragment>
                 )}
               </Pressable>
@@ -1358,7 +2032,7 @@ const PropertyOutlineTool = ({
                   Drawing {activeStructure?.label || selectedType.label}
                 </Text>
                 <Text style={styles.drawingText}>
-                  {activeStructure && activeStructure.points.length >= 3 
+                  {activeStructure && activeStructure.points.length >= 3
                     ? "Tap first point to close, or add more points"
                     : "Tap to add points. Need at least 3 points."}
                 </Text>
@@ -1376,9 +2050,12 @@ const PropertyOutlineTool = ({
         <Text style={styles.structuresTitle}>Layers ({structures.length})</Text>
         <ScrollView>
           {structures.map((structure) => (
-            <View 
+            <View
               key={structure.id}
-              style={[styles.structureCard, { borderLeftColor: structure.color }]}
+              style={[
+                styles.structureCard,
+                { borderLeftColor: structure.color },
+              ]}
             >
               {editingStructureId === structure.id ? (
                 <View style={styles.editingRow}>
@@ -1388,7 +2065,7 @@ const PropertyOutlineTool = ({
                     onChangeText={setEditingLabel}
                     autoFocus
                     placeholder="Structure name..."
-                    placeholderTextColor="#9ca3af"
+                    placeholderTextColor={theme.placeholder}
                   />
                   <TouchableOpacity
                     onPress={() => saveLabel(structure.id)}
@@ -1441,9 +2118,7 @@ const PropertyOutlineTool = ({
             </View>
           ))}
           {structures.length === 0 && (
-            <Text style={styles.emptyText}>
-              No structures outlined yet
-            </Text>
+            <Text style={styles.emptyText}>No structures outlined yet</Text>
           )}
         </ScrollView>
       </View>
@@ -1463,7 +2138,7 @@ const PropertyOutlineTool = ({
               value={pendingStructureName}
               onChangeText={setPendingStructureName}
               placeholder="e.g., Main House, Garage 2, Basement..."
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={theme.placeholder}
               autoFocus
             />
             <View style={styles.modalButtons}>
@@ -1503,10 +2178,7 @@ const PropertyOutlineTool = ({
           </View>
         ) : (
           <View style={styles.normalActions}>
-            <TouchableOpacity
-              onPress={onCancel}
-              style={styles.cancelButton}
-            >
+            <TouchableOpacity onPress={onCancel} style={styles.cancelButton}>
               <Text style={styles.cancelButtonText}>Cancel</Text>
             </TouchableOpacity>
 
@@ -1516,12 +2188,17 @@ const PropertyOutlineTool = ({
                 style={styles.drawButton}
               >
                 <Plus size={20} color="#fff" />
-                <Text style={styles.drawButtonText}>Draw {selectedType.label}</Text>
+                <Text style={styles.drawButtonText}>
+                  Draw {selectedType.label}
+                </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleSave}
-                style={[styles.saveButton, structures.length === 0 && styles.saveButtonDisabled]}
+                style={[
+                  styles.saveButton,
+                  structures.length === 0 && styles.saveButtonDisabled,
+                ]}
                 disabled={structures.length === 0}
               >
                 <Save size={20} color="#fff" />
@@ -1534,390 +2211,5 @@ const PropertyOutlineTool = ({
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#111827',
-  },
-  header: {
-    padding: 16,
-    paddingTop: Platform.OS === 'android' ? 8 : 16,
-    backgroundColor: '#1f2937',
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  headerTitle: {
-    color: '#f3f4f6',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  addressRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  addressInput: {
-    flex: 1,
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 14,
-    color: '#f3f4f6',
-  },
-  refreshButton: {
-    marginLeft: 8,
-    backgroundColor: '#4b5563',
-    padding: 8,
-    borderRadius: 8,
-  },
-  coordsText: {
-    color: '#9ca3af',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  typeSelector: {
-    padding: 8,
-    backgroundColor: '#1f2937',
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  typeButton: {
-    marginRight: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#374151',
-    borderWidth: 1,
-  },
-  typeButtonActive: {
-    backgroundColor: '#3b82f6',
-  },
-  typeButtonText: {
-    marginLeft: 8,
-    fontWeight: '500',
-    color: '#f3f4f6',
-  },
-  typeButtonTextActive: {
-    color: '#ffffff',
-  },
-  measurementsToggle: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#1f2937',
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
-  },
-  measurementsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#6b7280',
-    marginRight: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxChecked: {
-    backgroundColor: '#3b82f6',
-    borderColor: '#3b82f6',
-  },
-  measurementsText: {
-    color: '#e5e7eb',
-    fontWeight: '500',
-  },
-  mapContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-  },
-  loadingText: {
-    marginTop: 16,
-    color: '#9ca3af',
-  },
-  noLocationText: {
-    color: '#9ca3af',
-    textAlign: 'center',
-  },
-  zoomControls: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    zIndex: 50,
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  zoomButton: {
-    padding: 12,
-  },
-  zoomButtonTop: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  drawingInstructions: {
-    position: 'absolute',
-    top: 16,
-    left: 16,
-    right: 80,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    padding: 12,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-    zIndex: 40,
-  },
-  drawingTitle: {
-    fontWeight: 'bold',
-    color: '#3b82f6',
-  },
-  drawingText: {
-    fontSize: 14,
-    color: '#374151',
-  },
-  drawingPoints: {
-    fontSize: 14,
-    color: '#111827',
-    fontWeight: '500',
-  },
-  structuresList: {
-    backgroundColor: '#1f2937',
-    padding: 16,
-    maxHeight: 256,
-  },
-  structuresTitle: {
-    fontWeight: 'bold',
-    fontSize: 18,
-    marginBottom: 8,
-    color: '#f3f4f6',
-  },
-  structureCard: {
-    backgroundColor: '#374151',
-    padding: 12,
-    marginBottom: 8,
-    borderRadius: 8,
-    borderLeftWidth: 4,
-  },
-  editingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  editInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#3b82f6',
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    color: '#f3f4f6',
-  },
-  saveEditButton: {
-    marginLeft: 8,
-    backgroundColor: '#16a34a',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  saveEditButtonText: {
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  cancelEditButton: {
-    marginLeft: 4,
-    backgroundColor: '#6b7280',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  cancelEditButtonText: {
-    color: '#e5e7eb',
-    fontWeight: '500',
-  },
-  structureHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  structureName: {
-    fontWeight: 'bold',
-    color: '#f3f4f6',
-    flex: 1,
-  },
-  structureActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  actionButton: {
-    padding: 8,
-  },
-  structureInfo: {
-    fontSize: 14,
-    color: '#9ca3af',
-  },
-  emptyText: {
-    textAlign: 'center',
-    color: '#6b7280',
-    paddingVertical: 16,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 8,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 16,
-    color: '#111827',
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-    color: '#111827',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  modalCancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#e5e7eb',
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  modalCancelButtonText: {
-    color: '#374151',
-    fontWeight: '500',
-  },
-  modalConfirmButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-  },
-  modalConfirmButtonText: {
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  actionBar: {
-    padding: 16,
-    backgroundColor: '#1f2937',
-    borderTopWidth: 1,
-    borderTopColor: '#374151',
-  },
-  drawingActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelDrawingButton: {
-    flex: 1,
-    marginRight: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#6b7280',
-    borderRadius: 8,
-  },
-  cancelDrawingButtonText: {
-    textAlign: 'center',
-    color: '#f3f4f6',
-    fontWeight: '500',
-  },
-  completeDrawingButton: {
-    flex: 1,
-    marginLeft: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
-  },
-  completeDrawingButtonText: {
-    textAlign: 'center',
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  normalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cancelButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#6b7280',
-    borderRadius: 8,
-  },
-  cancelButtonText: {
-    color: '#f3f4f6',
-    fontWeight: '500',
-  },
-  rightActions: {
-    flexDirection: 'row',
-  },
-  drawButton: {
-    marginRight: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  drawButtonText: {
-    marginLeft: 8,
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-  saveButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#16a34a',
-    borderRadius: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  saveButtonDisabled: {
-    opacity: 0.5,
-  },
-  saveButtonText: {
-    marginLeft: 8,
-    color: '#ffffff',
-    fontWeight: '500',
-  },
-});
 
 export default PropertyOutlineTool;

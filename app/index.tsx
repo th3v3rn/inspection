@@ -10,6 +10,7 @@ import {
   Platform,
   AppState,
   StyleSheet,
+  useColorScheme,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Wifi, WifiOff, Plus, List, RefreshCw, Settings as SettingsIcon } from "lucide-react-native";
@@ -36,24 +37,13 @@ export default function Index() {
   const [currentView, setCurrentView] = useState<'dashboard' | 'inspection' | 'saved' | 'admin' | 'assigned' | 'settings'>('dashboard');
   const [selectedInspection, setSelectedInspection] = useState<any>(null);
   const [recentInspections, setRecentInspections] = useState<any[]>([]);
-  const [isDarkMode, setIsDarkMode] = useState(true);
   const [userFullName, setUserFullName] = useState<string | null>(null);
+  
+  // Use system color scheme
+  const systemColorScheme = useColorScheme();
+  const isDarkMode = systemColorScheme === 'dark';
 
   useEffect(() => {
-    // Load theme preference
-    const loadTheme = async () => {
-      try {
-        const theme = await AsyncStorage.getItem('theme');
-        if (theme) {
-          setIsDarkMode(theme === 'dark');
-        }
-      } catch (error) {
-        console.error('Error loading theme:', error);
-      }
-    };
-    
-    loadTheme();
-    
     console.log('=== Starting auth check ===');
     
     // Set a timeout to prevent infinite loading
@@ -289,7 +279,6 @@ export default function Index() {
         currentUser={user}
         onClose={() => setCurrentView('dashboard')}
         isDarkMode={isDarkMode}
-        onToggleTheme={setIsDarkMode}
       />
     );
   }

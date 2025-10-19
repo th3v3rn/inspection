@@ -79,53 +79,65 @@ class AIFormFillerService {
     const lowerTranscript = transcript.toLowerCase();
     const updatedFields: Array<{ id: string; value: any; confidence: number }> = [];
 
-    // Category-specific keyword mappings
     const categoryKeywords = this.getCategoryKeywords(category);
 
+    // First pass: only extract checkbox and dropdown values
     formFields.forEach((field) => {
       const keywords = categoryKeywords[field.id] || [];
-      
-      // Handle different field types
+
       if (field.type === "checkbox") {
         const checkboxValue = this.extractCheckboxValue(lowerTranscript, keywords);
         if (checkboxValue !== null) {
-          updatedFields.push({
-            id: field.id,
-            value: checkboxValue,
-            confidence: 0.8,
-          });
+          updatedFields.push({ id: field.id, value: checkboxValue, confidence: 0.8 });
         }
       } else if (field.type === "dropdown" && field.options) {
         const dropdownValue = this.extractDropdownValue(lowerTranscript, field.options);
         if (dropdownValue) {
-          updatedFields.push({
-            id: field.id,
-            value: dropdownValue,
-            confidence: 0.85,
-          });
-        }
-      } else {
-        // Text field - extract value using keywords
-        const extractedValue = this.extractValueForKeywords(lowerTranscript, keywords);
-        if (extractedValue) {
-          updatedFields.push({
-            id: field.id,
-            value: extractedValue,
-            confidence: 0.7,
-          });
+          updatedFields.push({ id: field.id, value: dropdownValue, confidence: 0.85 });
         }
       }
+      // Intentionally skip mapping other text fields here
     });
+
+    // Strip matched dropdown option phrases and related keywords from transcript
+    let cleaned = transcript;
+    const matchedFieldIds = new Set(updatedFields.map(f => f.id));
+
+    // Remove matched dropdown option values (case-insensitive)
+    updatedFields.forEach((f) => {
+      const fieldDef = formFields.find(ff => ff.id === f.id);
+      if (fieldDef?.type === "dropdown" && typeof f.value === "string" && f.value) {
+        const pattern = new RegExp(this.escapeRegExp(String(f.value)), "ig");
+        cleaned = cleaned.replace(pattern, "");
+      }
+    });
+
+    // Remove category keywords for fields we matched (helps avoid stuffing)
+    matchedFieldIds.forEach((fieldId) => {
+      const kws = categoryKeywords[fieldId] || [];
+      kws.forEach((kw) => {
+        if (!kw) return;
+        const pattern = new RegExp(this.escapeRegExp(kw), "ig");
+        cleaned = cleaned.replace(pattern, "");
+      });
+    });
+
+    // Normalize whitespace
+    cleaned = cleaned.replace(/\s{2,}/g, " ").replace(/^\s+|\s+$/g, "");
+
+    // Route remaining text to generalNotes only (if present)
+    if (cleaned && cleaned.length > 3) {
+      const notesField = formFields.find(f => f.id === "generalNotes");
+      if (notesField) {
+        updatedFields.push({ id: "generalNotes", value: cleaned, confidence: 0.7 });
+      }
+    }
 
     const avgConfidence = updatedFields.length > 0
       ? updatedFields.reduce((sum, f) => sum + f.confidence, 0) / updatedFields.length
       : 0;
 
-    return {
-      updatedFields,
-      confidence: avgConfidence,
-      rawResponse: "Keyword-based extraction",
-    };
+    return { updatedFields, confidence: avgConfidence, rawResponse: "Keyword-based extraction with strip" };
   }
 
   /**
@@ -429,10 +441,8 @@ Return ONLY a JSON array in this format:
         };
 
         if (fieldDef.type === "checkbox") {
-          // Convert to boolean
           normalizedField.value = normalizedField.value === true || normalizedField.value === "true" || normalizedField.value === "yes";
         } else if (fieldDef.type === "dropdown" && fieldDef.options) {
-          // Validate dropdown value
           if (!fieldDef.options.includes(normalizedField.value)) {
             console.warn(`Invalid dropdown value "${normalizedField.value}" for field ${normalizedField.id}`);
             return null;
@@ -442,12 +452,19 @@ Return ONLY a JSON array in this format:
         return normalizedField;
       }).filter(Boolean);
 
-      const avgConfidence = validatedFields.length > 0
-        ? validatedFields.reduce((sum: number, f: any) => sum + (f.confidence || 0.5), 0) / validatedFields.length
+      // Only allow dropdowns, checkboxes, and generalNotes from AI to prevent stuffing specific text fields
+      const filteredAiFields = (validatedFields as Array<{id: string; value: any; confidence: number}>).filter(vf => {
+        if (vf.id === 'generalNotes') return true;
+        const def = formFields.find(f => f.id === vf.id);
+        return def?.type === 'dropdown' || def?.type === 'checkbox';
+      });
+
+      const avgConfidence = filteredAiFields.length > 0
+        ? filteredAiFields.reduce((sum: number, f: any) => sum + (f.confidence || 0.5), 0) / filteredAiFields.length
         : 0;
 
       return {
-        updatedFields: validatedFields,
+        updatedFields: filteredAiFields,
         confidence: avgConfidence,
         rawResponse: JSON.stringify(data),
       };
@@ -481,6 +498,11 @@ Return ONLY a JSON array in this format:
     });
 
     return Array.from(merged.values());
+  }
+
+  /** Utility: escape string for RegExp */
+  private escapeRegExp(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 }
 

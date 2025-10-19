@@ -13,6 +13,7 @@ import {
   FlatList,
   PanResponder,
   StyleSheet,
+  useColorScheme,
 } from "react-native";
 import { useProperty } from "../contexts/PropertyContext";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,7 @@ interface PropertyIDFormProps {
   isFirstCategory?: boolean;
   isLastCategory?: boolean;
   initialData?: any;
+  inspectionId?: string;
 }
 
 const PropertyIDForm = ({
@@ -35,7 +37,12 @@ const PropertyIDForm = ({
   isFirstCategory = true,
   isLastCategory = false,
   initialData = null,
+  inspectionId,
 }: PropertyIDFormProps) => {
+  // Use system color scheme
+  const colorScheme = useColorScheme();
+  const isDarkMode = colorScheme === 'dark';
+  
   const { propertyData: globalPropertyData } = useProperty();
   const [isLoadingPropertyData, setIsLoadingPropertyData] = useState(false);
   const [addressQuery, setAddressQuery] = useState("");
@@ -109,7 +116,54 @@ const PropertyIDForm = ({
     console.log("initialData:", JSON.stringify(initialData, null, 2));
     console.log("globalPropertyData:", JSON.stringify(globalPropertyData, null, 2));
     
-    // Priority: initialData.propertyApiData > globalPropertyData > initialData
+    // CRITICAL: Check if we have saved form data first (from categories or property_metadata)
+    const hasSavedData = initialData && (
+      initialData.acres || 
+      initialData.parcelAccount || 
+      initialData.parcel_account ||
+      initialData.sqft ||
+      initialData.yearBuilt ||
+      initialData.year_built
+    );
+    
+    if (hasSavedData) {
+      // Load from saved data (highest priority)
+      console.log("✅ Loading from saved data");
+      
+      const numberOfStories = initialData.numberOfStories || initialData.number_of_stories || "";
+      const stories = parseInt(numberOfStories) || 0;
+      const floorPercentages = stories > 1 
+        ? Array.from({ length: stories }, (_, i) => ({
+            floor: i + 1,
+            percentage: initialData.floorPercentages?.[i]?.percentage || 
+                       initialData.floor_percentages?.[i]?.percentage || ""
+          }))
+        : [];
+      
+      setFormData({
+        address: initialData.address || "",
+        acres: initialData.acres || "",
+        parcelAccount: initialData.parcelAccount || initialData.parcel_account || "",
+        parcelId: initialData.parcelId || initialData.parcel_id || "",
+        numberOfStories,
+        floorPercentages,
+        sqft: initialData.sqft || "",
+        yearBuilt: initialData.yearBuilt || initialData.year_built || "",
+        structureType: initialData.structureType || initialData.structure_type || "",
+        siteAccess: initialData.siteAccess || initialData.site_access || "",
+        structureUse: initialData.structureUse || initialData.structure_use || "",
+        overallQuality: initialData.overallQuality || initialData.overall_quality || "",
+        detachedStructures: initialData.detachedStructures || initialData.detached_structures || [],
+        beds: initialData.beds || "",
+        bathrooms: initialData.bathrooms || "",
+        notes: initialData.notes || "",
+      });
+      setAddressQuery(initialData.address || "");
+      setIsLoadingPropertyData(false);
+      return; // Exit early - don't check API data
+    }
+    
+    // Priority: initialData.propertyApiData > globalPropertyData
     const propertyApiData = initialData?.propertyApiData?.propertyData?.attributes || 
                            globalPropertyData?.propertyData?.propertyData?.attributes;
     
@@ -161,32 +215,23 @@ const PropertyIDForm = ({
       // Fallback to initialData if no Smarty data available
       console.log("Using initialData fallback");
       
-      const numberOfStories = initialData.numberOfStories || "";
-      const stories = parseInt(numberOfStories) || 0;
-      const floorPercentages = stories > 1 
-        ? Array.from({ length: stories }, (_, i) => ({
-            floor: i + 1,
-            percentage: initialData.floorPercentages?.[i]?.percentage || ""
-          }))
-        : [];
-      
       setFormData({
         address: initialData.address || "",
-        acres: initialData.acres || "",
-        parcelAccount: initialData.parcelAccount || "",
-        parcelId: initialData.parcelId || "",
-        numberOfStories,
-        floorPercentages,
-        sqft: initialData.sqft || "",
-        yearBuilt: initialData.yearBuilt || "",
-        structureType: initialData.structureType || "",
+        acres: "",
+        parcelAccount: "",
+        parcelId: "",
+        numberOfStories: "",
+        floorPercentages: [],
+        sqft: "",
+        yearBuilt: "",
+        structureType: "",
         siteAccess: "",
-        structureUse: initialData.structureUse || "",
-        overallQuality: initialData.overallQuality || "",
+        structureUse: "",
+        overallQuality: "",
         detachedStructures: [],
-        beds: initialData.beds || "",
-        bathrooms: initialData.bathrooms || "",
-        notes: initialData.notes || "",
+        beds: "",
+        bathrooms: "",
+        notes: "",
       });
       setAddressQuery(initialData.address || "");
       setIsLoadingPropertyData(false);
@@ -305,22 +350,80 @@ const PropertyIDForm = ({
     }));
   };
 
-  const handleNext = () => {
-    // Save data to parent's formData before navigating
+  const handleNext = async () => {
     console.log("=== PropertyIDForm handleNext ===");
     console.log("Saving form data before next:", JSON.stringify(formData, null, 2));
+    console.log("Inspection ID:", inspectionId);
     
-    // Call onComplete to save the data to parent's formData
-    onComplete({
-      category: "Property ID",
-      ...formData,
-      completed: false, // Mark as not fully completed
-      timestamp: new Date().toISOString(),
-    });
-    
-    // Then navigate to next category
-    if (onNext) {
-      onNext();
+    try {
+      const propertyMetadata = {
+        acres: formData.acres,
+        parcel_account: formData.parcelAccount,
+        parcel_id: formData.parcelId,
+        number_of_stories: formData.numberOfStories,
+        floor_percentages: formData.floorPercentages,
+        sqft: formData.sqft,
+        year_built: formData.yearBuilt,
+        structure_type: formData.structureType,
+        site_access: formData.siteAccess,
+        structure_use: formData.structureUse,
+        overall_quality: formData.overallQuality,
+        detached_structures: formData.detachedStructures,
+        beds: formData.beds,
+        bathrooms: formData.bathrooms,
+        notes: formData.notes,
+      };
+      
+      console.log("Property metadata to save:", JSON.stringify(propertyMetadata, null, 2));
+      
+      // Update inspection with property_metadata
+      if (inspectionId) {
+        console.log("Updating inspection with property_metadata...");
+        
+        const { data, error } = await supabase
+          .from('inspections')
+          .update({ property_metadata: propertyMetadata })
+          .eq('id', inspectionId)
+          .select();
+        
+        if (error) {
+          console.error("Error updating inspection:", error);
+        } else {
+          console.log("✅ Inspection updated with property_metadata");
+          console.log("Updated inspection data:", JSON.stringify(data, null, 2));
+        }
+      } else {
+        console.warn("⚠️ No inspectionId provided, cannot save to database");
+      }
+      
+      // CRITICAL: Save to parent's formData.categories.property_id
+      console.log("Calling onComplete to save to categories...");
+      await onComplete({
+        category: "Property ID",
+        ...formData,
+        completed: false,
+        timestamp: new Date().toISOString(),
+      });
+      
+      console.log("✅ onComplete called, data should be in categories now");
+      
+      // Navigate to next category
+      if (onNext) {
+        console.log("Navigating to next category...");
+        onNext();
+      }
+    } catch (error) {
+      console.error("Error in handleNext:", error);
+      // Still save and navigate even if database save fails
+      await onComplete({
+        category: "Property ID",
+        ...formData,
+        completed: false,
+        timestamp: new Date().toISOString(),
+      });
+      if (onNext) {
+        onNext();
+      }
     }
   };
 
@@ -332,64 +435,130 @@ const PropertyIDForm = ({
     
     console.log("=== PropertyIDForm handleComplete ===");
     console.log("Sending form data:", JSON.stringify(formData, null, 2));
+    console.log("Inspection ID:", inspectionId);
     
     try {
-      // Create property record in database
-      console.log("Creating property record...");
-      
-      const propertyData = {
-        address: formData.address,
-        admin_id: currentUser?.role === 'admin' ? currentUser.id : currentUser?.admin_id,
-        property_data: {
-          acres: formData.acres,
-          parcel_account: formData.parcelAccount,
-          parcel_id: formData.parcelId,
-          number_of_stories: formData.numberOfStories,
-          floor_percentages: formData.floorPercentages,
-          sqft: formData.sqft,
-          year_built: formData.yearBuilt,
-          structure_type: formData.structureType,
-          site_access: formData.siteAccess,
-          structure_use: formData.structureUse,
-          overall_quality: formData.overallQuality,
-          detached_structures: formData.detachedStructures,
-          beds: formData.beds,
-          bathrooms: formData.bathrooms,
-          notes: formData.notes,
-        },
+      const propertyMetadata = {
+        acres: formData.acres,
+        parcel_account: formData.parcelAccount,
+        parcel_id: formData.parcelId,
+        number_of_stories: formData.numberOfStories,
+        floor_percentages: formData.floorPercentages,
+        sqft: formData.sqft,
+        year_built: formData.yearBuilt,
+        structure_type: formData.structureType,
+        site_access: formData.siteAccess,
+        structure_use: formData.structureUse,
+        overall_quality: formData.overallQuality,
+        detached_structures: formData.detachedStructures,
+        beds: formData.beds,
+        bathrooms: formData.bathrooms,
+        notes: formData.notes,
       };
       
-      const { data: property, error } = await supabase
-        .from('properties')
-        .insert([propertyData])
-        .select()
-        .single();
+      console.log("Property metadata to save:", JSON.stringify(propertyMetadata, null, 2));
       
-      if (error) {
-        console.error("Error creating property:", error);
-        Alert.alert("Error", "Failed to create property record. Please try again.");
-        return;
+      // Update inspection with property_metadata
+      if (inspectionId) {
+        console.log("Updating inspection with property_metadata...");
+        
+        const { data, error } = await supabase
+          .from('inspections')
+          .update({ property_metadata: propertyMetadata })
+          .eq('id', inspectionId)
+          .select();
+        
+        if (error) {
+          console.error("Error updating inspection:", error);
+          Alert.alert("Error", "Failed to save property data. Please try again.");
+          return;
+        }
+        
+        console.log("✅ Inspection updated with property_metadata");
+        console.log("Updated inspection data:", JSON.stringify(data, null, 2));
+      } else {
+        console.warn("⚠️ No inspectionId provided, cannot save to database");
       }
       
-      console.log("✅ Property created with ID:", property.id);
-      
-      // Pass the property_id back to the parent
-      onComplete({
+      // CRITICAL: Save to parent's formData.categories.property_id
+      console.log("Calling onComplete to save to categories...");
+      await onComplete({
         category: "Property ID",
         ...formData,
-        property_id: property.id,
         completed: true,
         timestamp: new Date().toISOString(),
       });
+      
+      console.log("✅ onComplete called with completed: true, should navigate back to category selection");
     } catch (error) {
       console.error("Error in handleComplete:", error);
       Alert.alert("Error", "Failed to save property data. Please try again.");
     }
   };
 
-  const handlePrevious = () => {
-    if (onPrevious) {
-      onPrevious();
+  const handlePrevious = async () => {
+    console.log("=== PropertyIDForm handlePrevious ===");
+    console.log("Saving form data before previous:", JSON.stringify(formData, null, 2));
+    
+    try {
+      const propertyMetadata = {
+        acres: formData.acres,
+        parcel_account: formData.parcelAccount,
+        parcel_id: formData.parcelId,
+        number_of_stories: formData.numberOfStories,
+        floor_percentages: formData.floorPercentages,
+        sqft: formData.sqft,
+        year_built: formData.yearBuilt,
+        structure_type: formData.structureType,
+        site_access: formData.siteAccess,
+        structure_use: formData.structureUse,
+        overall_quality: formData.overallQuality,
+        detached_structures: formData.detachedStructures,
+        beds: formData.beds,
+        bathrooms: formData.bathrooms,
+        notes: formData.notes,
+      };
+      
+      // Update inspection with property_metadata
+      if (inspectionId) {
+        console.log("Updating inspection with property_metadata...");
+        
+        const { error } = await supabase
+          .from('inspections')
+          .update({ property_metadata: propertyMetadata })
+          .eq('id', inspectionId);
+        
+        if (error) {
+          console.error("Error updating inspection:", error);
+        } else {
+          console.log("✅ Inspection updated with property_metadata");
+        }
+      }
+      
+      // Save to parent's formData
+      onComplete({
+        category: "Property ID",
+        ...formData,
+        completed: false,
+        timestamp: new Date().toISOString(),
+      });
+      
+      // Navigate to previous category
+      if (onPrevious) {
+        onPrevious();
+      }
+    } catch (error) {
+      console.error("Error in handlePrevious:", error);
+      // Still save and navigate even if database save fails
+      onComplete({
+        category: "Property ID",
+        ...formData,
+        completed: false,
+        timestamp: new Date().toISOString(),
+      });
+      if (onPrevious) {
+        onPrevious();
+      }
     }
   };
 
@@ -422,27 +591,30 @@ const PropertyIDForm = ({
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#111827" />
+    <SafeAreaView style={[styles.container, !isDarkMode && styles.containerLight]}>
+      <StatusBar 
+        barStyle={isDarkMode ? "light-content" : "dark-content"} 
+        backgroundColor={isDarkMode ? "#111827" : "#ffffff"} 
+      />
       
-      {/* Header with Back Button */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onCancel} style={styles.backButton}>
-          <Text style={styles.backButtonText}>←</Text>
+          <Text style={[styles.backButtonText, !isDarkMode && styles.backButtonTextLight]}>← Back</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Property Identification</Text>
+        <Text style={[styles.headerTitle, !isDarkMode && styles.headerTitleLight]}>Property ID</Text>
+        <View style={styles.backButton} />
       </View>
 
-      <ScrollView style={styles.scrollView} {...panResponder.panHandlers}>
+      <ScrollView style={[styles.scrollView, !isDarkMode && styles.scrollViewLight]} {...panResponder.panHandlers}>
         <View style={styles.content}>
           {/* Address Search Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Property Address</Text>
+          <View style={[styles.section, !isDarkMode && styles.sectionLight]}>
+            <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Property Address</Text>
             
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Address *</Text>
+              <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Address *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, !isDarkMode && styles.inputLight]}
                 value={addressQuery}
                 onChangeText={handleAddressChange}
                 onFocus={handleAddressFocus}
@@ -452,7 +624,7 @@ const PropertyIDForm = ({
               
               {/* Address Suggestions */}
               {addressSuggestions.length > 0 && (
-                <View style={styles.suggestionsContainer}>
+                <View style={[styles.suggestionsContainer, !isDarkMode && styles.suggestionsContainerLight]}>
                   <FlatList
                     data={addressSuggestions}
                     keyExtractor={(item) => item.place_id}
@@ -461,7 +633,7 @@ const PropertyIDForm = ({
                         onPress={() => selectAddress(item)}
                         style={styles.suggestionItem}
                       >
-                        <Text style={styles.suggestionText}>{item.description}</Text>
+                        <Text style={[styles.suggestionText, !isDarkMode && styles.suggestionTextLight]}>{item.description}</Text>
                       </TouchableOpacity>
                     )}
                   />
@@ -470,22 +642,22 @@ const PropertyIDForm = ({
               
               {isSearching && (
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="small" color="#9ca3af" />
+                  <ActivityIndicator size="small" color={isDarkMode ? "#9ca3af" : "#3b82f6"} />
                 </View>
               )}
             </View>
           </View>
 
           {/* Property Details Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Property Details</Text>
+          <View style={[styles.section, !isDarkMode && styles.sectionLight]}>
+            <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Property Details</Text>
             
             {/* Two Column Layout for Acres and Parcel Account */}
             <View style={styles.row}>
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Acres</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Acres</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.acres}
                   onChangeText={(text) => handleFieldChange("acres", text)}
                   placeholder="e.g., 0.5"
@@ -495,9 +667,9 @@ const PropertyIDForm = ({
               </View>
 
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Year Built</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Year Built</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.yearBuilt}
                   onChangeText={(text) => handleFieldChange("yearBuilt", text)}
                   placeholder="e.g., 2021"
@@ -510,9 +682,9 @@ const PropertyIDForm = ({
             {/* Parcel Information Row */}
             <View style={styles.row}>
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Parcel Account</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Parcel Account</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.parcelAccount}
                   onChangeText={(text) => handleFieldChange("parcelAccount", text)}
                   placeholder="Account #"
@@ -521,9 +693,9 @@ const PropertyIDForm = ({
               </View>
 
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Parcel ID</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Parcel ID</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.parcelId}
                   onChangeText={(text) => handleFieldChange("parcelId", text)}
                   placeholder="Parcel ID"
@@ -535,9 +707,9 @@ const PropertyIDForm = ({
             {/* Square Footage and Stories Row */}
             <View style={styles.row}>
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Square Footage</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Square Footage</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.sqft}
                   onChangeText={(text) => handleFieldChange("sqft", text)}
                   placeholder="e.g., 3475"
@@ -547,9 +719,9 @@ const PropertyIDForm = ({
               </View>
 
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Number of Stories</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Number of Stories</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.numberOfStories}
                   onChangeText={(text) => handleFieldChange("numberOfStories", text)}
                   placeholder="e.g., 2"
@@ -562,13 +734,13 @@ const PropertyIDForm = ({
             {/* Floor Percentages (only show if > 1 story) */}
             {parseInt(formData.numberOfStories) > 1 && (
               <View style={styles.fieldContainer}>
-                <Text style={styles.fieldLabel}>Floor Percentages</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Floor Percentages</Text>
                 <View style={styles.floorPercentagesRow}>
                   {formData.floorPercentages.map((floor, index) => (
                     <View key={index} style={styles.floorPercentageItem}>
-                      <Text style={styles.floorLabel}>Floor {floor.floor}</Text>
+                      <Text style={[styles.floorLabel, !isDarkMode && styles.floorLabelLight]}>Floor {floor.floor}</Text>
                       <TextInput
-                        style={styles.floorInput}
+                        style={[styles.floorInput, !isDarkMode && styles.floorInputLight]}
                         value={floor.percentage}
                         onChangeText={(text) => handleFloorPercentageChange(index, text)}
                         placeholder="%"
@@ -584,9 +756,9 @@ const PropertyIDForm = ({
             {/* Beds and Bathrooms Row */}
             <View style={styles.row}>
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Bedrooms</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Bedrooms</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.beds}
                   onChangeText={(text) => handleFieldChange("beds", text)}
                   placeholder="e.g., 3"
@@ -596,9 +768,9 @@ const PropertyIDForm = ({
               </View>
 
               <View style={[styles.fieldContainer, styles.halfWidth]}>
-                <Text style={styles.fieldLabel}>Bathrooms</Text>
+                <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Bathrooms</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, !isDarkMode && styles.inputLight]}
                   value={formData.bathrooms}
                   onChangeText={(text) => handleFieldChange("bathrooms", text)}
                   placeholder="e.g., 2.5"
@@ -610,13 +782,13 @@ const PropertyIDForm = ({
           </View>
 
           {/* Structure Information Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Structure Information</Text>
+          <View style={[styles.section, !isDarkMode && styles.sectionLight]}>
+            <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Structure Information</Text>
             
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Structure Type</Text>
+              <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Structure Type</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, !isDarkMode && styles.inputLight]}
                 value={formData.structureType}
                 onChangeText={(text) => handleFieldChange("structureType", text)}
                 placeholder="e.g., Ranch, Colonial, Cape Cod"
@@ -625,9 +797,9 @@ const PropertyIDForm = ({
             </View>
 
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Structure Use</Text>
+              <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Structure Use</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, !isDarkMode && styles.inputLight]}
                 value={formData.structureUse}
                 onChangeText={(text) => handleFieldChange("structureUse", text)}
                 placeholder="e.g., Residential, Commercial"
@@ -636,9 +808,9 @@ const PropertyIDForm = ({
             </View>
 
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Site Access</Text>
+              <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Site Access</Text>
               <TextInput
-                style={[styles.input, styles.textArea]}
+                style={[styles.input, styles.textArea, !isDarkMode && styles.inputLight]}
                 value={formData.siteAccess}
                 onChangeText={(text) => handleFieldChange("siteAccess", text)}
                 placeholder="Describe site access conditions"
@@ -650,9 +822,9 @@ const PropertyIDForm = ({
             </View>
 
             <View style={styles.fieldContainer}>
-              <Text style={styles.fieldLabel}>Overall Quality</Text>
+              <Text style={[styles.fieldLabel, !isDarkMode && styles.fieldLabelLight]}>Overall Quality</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, !isDarkMode && styles.inputLight]}
                 value={formData.overallQuality}
                 onChangeText={(text) => handleFieldChange("overallQuality", text)}
                 placeholder="e.g., Excellent, Good, Fair, Poor"
@@ -662,8 +834,8 @@ const PropertyIDForm = ({
           </View>
 
           {/* Detached Structures Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Detached Structures</Text>
+          <View style={[styles.section, !isDarkMode && styles.sectionLight]}>
+            <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Detached Structures</Text>
             <View style={styles.chipContainer}>
               {detachedStructureOptions.map((structure) => (
                 <TouchableOpacity
@@ -671,12 +843,14 @@ const PropertyIDForm = ({
                   onPress={() => toggleDetachedStructure(structure)}
                   style={[
                     styles.chip,
+                    !isDarkMode && !formData.detachedStructures.includes(structure) && styles.chipLight,
                     formData.detachedStructures.includes(structure) && styles.chipSelected
                   ]}
                 >
                   <Text
                     style={[
                       styles.chipText,
+                      !isDarkMode && !formData.detachedStructures.includes(structure) && styles.chipTextLight,
                       formData.detachedStructures.includes(structure) && styles.chipTextSelected
                     ]}
                   >
@@ -688,10 +862,10 @@ const PropertyIDForm = ({
           </View>
 
           {/* Notes Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Additional Notes</Text>
+          <View style={[styles.section, !isDarkMode && styles.sectionLight]}>
+            <Text style={[styles.sectionTitle, !isDarkMode && styles.sectionTitleLight]}>Additional Notes</Text>
             <TextInput
-              style={[styles.input, styles.textArea]}
+              style={[styles.input, styles.textArea, !isDarkMode && styles.inputLight]}
               placeholder="Enter any additional notes about the property..."
               placeholderTextColor="#9ca3af"
               multiline
@@ -709,12 +883,15 @@ const PropertyIDForm = ({
               disabled={isFirstCategory}
               style={[
                 styles.navButton,
+                !isDarkMode && styles.navButtonLight,
                 styles.navButtonLeft,
-                isFirstCategory && styles.navButtonDisabled
+                isFirstCategory && styles.navButtonDisabled,
+                isFirstCategory && !isDarkMode && styles.navButtonDisabledLight
               ]}
             >
               <Text style={[
                 styles.navButtonText,
+                !isDarkMode && styles.navButtonTextLight,
                 isFirstCategory && styles.navButtonTextDisabled
               ]}>
                 ← Previous
@@ -723,9 +900,9 @@ const PropertyIDForm = ({
 
             <TouchableOpacity
               onPress={handleComplete}
-              style={styles.completeButton}
+              style={[styles.completeButton, !isDarkMode && styles.completeButtonLight]}
             >
-              <Text style={styles.completeButtonText}>
+              <Text style={[styles.completeButtonText, !isDarkMode && styles.completeButtonTextLight]}>
                 Complete
               </Text>
             </TouchableOpacity>
@@ -735,12 +912,14 @@ const PropertyIDForm = ({
               disabled={isLastCategory}
               style={[
                 styles.navButton,
+                !isDarkMode && styles.navButtonLight,
                 styles.navButtonRight,
                 isLastCategory && styles.navButtonDisabled
               ]}
             >
               <Text style={[
                 styles.navButtonText,
+                !isDarkMode && styles.navButtonTextLight,
                 isLastCategory && styles.navButtonTextDisabled
               ]}>
                 Next →
@@ -758,30 +937,41 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#111827',
   },
+  containerLight: {
+    backgroundColor: '#ffffff',
+  },
   header: {
-    backgroundColor: '#1f2937',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#374151',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f2937',
   },
   backButton: {
-    marginRight: 12,
-    padding: 8,
+    width: 60,
   },
   backButtonText: {
-    color: '#d1d5db',
-    fontSize: 24,
+    color: '#3b82f6',
+    fontSize: 16,
+  },
+  backButtonTextLight: {
+    color: '#2563eb',
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#f3f4f6',
+  },
+  headerTitleLight: {
+    color: '#111827',
   },
   scrollView: {
     flex: 1,
     backgroundColor: '#111827',
+  },
+  scrollViewLight: {
+    backgroundColor: '#f9fafb',
   },
   content: {
     padding: 16,
@@ -794,11 +984,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#374151',
   },
+  sectionLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e5e7eb',
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 16,
     color: '#f3f4f6',
+  },
+  sectionTitleLight: {
+    color: '#111827',
   },
   fieldContainer: {
     marginBottom: 16,
@@ -809,6 +1006,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     color: '#e5e7eb',
   },
+  fieldLabelLight: {
+    color: '#374151',
+  },
   input: {
     backgroundColor: '#374151',
     padding: 12,
@@ -817,6 +1017,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     color: '#f3f4f6',
     fontSize: 16,
+  },
+  inputLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+    color: '#111827',
   },
   textArea: {
     minHeight: 80,
@@ -837,6 +1042,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
     maxHeight: 200,
   },
+  suggestionsContainerLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   suggestionItem: {
     padding: 12,
     borderBottomWidth: 1,
@@ -844,6 +1053,9 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     color: '#f3f4f6',
+  },
+  suggestionTextLight: {
+    color: '#111827',
   },
   loadingContainer: {
     marginTop: 8,
@@ -862,6 +1074,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  floorLabelLight: {
+    color: '#6b7280',
+  },
   floorInput: {
     backgroundColor: '#374151',
     borderWidth: 1,
@@ -870,6 +1085,11 @@ const styles = StyleSheet.create({
     padding: 8,
     color: '#f3f4f6',
     textAlign: 'center',
+  },
+  floorInputLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+    color: '#111827',
   },
   chipContainer: {
     flexDirection: 'row',
@@ -884,6 +1104,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4b5563',
   },
+  chipLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   chipSelected: {
     backgroundColor: '#3b82f6',
     borderColor: '#2563eb',
@@ -891,6 +1115,9 @@ const styles = StyleSheet.create({
   chipText: {
     color: '#d1d5db',
     fontWeight: '500',
+  },
+  chipTextLight: {
+    color: '#374151',
   },
   chipTextSelected: {
     color: '#ffffff',
@@ -912,6 +1139,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#4b5563',
     borderColor: '#6b7280',
   },
+  navButtonLight: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d1d5db',
+  },
   navButtonLeft: {
     marginRight: 8,
   },
@@ -922,10 +1153,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     borderColor: '#4b5563',
   },
+  navButtonDisabledLight: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#e5e7eb',
+  },
   navButtonText: {
     textAlign: 'center',
     fontWeight: '600',
     color: '#f3f4f6',
+  },
+  navButtonTextLight: {
+    color: '#374151',
   },
   navButtonTextDisabled: {
     color: '#9ca3af',
@@ -939,10 +1177,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4b5563',
   },
+  completeButtonLight: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#3b82f6',
+  },
   completeButtonText: {
     color: '#f3f4f6',
     textAlign: 'center',
     fontWeight: '600',
+  },
+  completeButtonTextLight: {
+    color: '#ffffff',
   },
 });
 
